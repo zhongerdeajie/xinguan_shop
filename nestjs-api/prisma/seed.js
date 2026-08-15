@@ -11,7 +11,10 @@ const bcrypt = require('bcrypt');
 const prisma = new PrismaClient();
 
 async function seedAdmin() {
-  const password = await bcrypt.hash('123456', 10);
+  // 从环境变量读密码；不设则回退到 123456（仅本地开发用）
+  // 上线前请在 .env 设置 SEED_ADMIN_PASSWORD=<强密码>
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || '123456';
+  const password = await bcrypt.hash(adminPassword, 10);
   await prisma.employee.upsert({
     where: { username: 'admin' },
     update: { password, status: 1, updateTime: new Date() },

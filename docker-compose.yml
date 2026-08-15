@@ -71,6 +71,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://python-ai:5000
       - JWT_SECRET=${JWT_SECRET}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-123456}
     depends_on:
       - mysql
       - redis
