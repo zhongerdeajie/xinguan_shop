@@ -1,0 +1,121 @@
+services:
+  # ========== 统一入口网关（对外只暴露这一个端口）==========
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - go-service
+      - python-ai
+      - nestjs-api
+      - next-web
+    restart: unless-stopped
+
+  # Go 高并发服务
+  go-service:
+    build: ./go-service
+    ports:
+      - "8081:8081"
+    environment:
+      - GO_PORT=8081
+      - REDIS_ADDR=redis:6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=starselect
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - redis
+      - mysql
+    restart: unless-stopped
+
+  # Python AI + LangChain RAG
+  python-ai:
+    build: ./python-ai
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=starselect
+      - GO_SERVICE_URL=http://go-service:8081
+      - NESTJS_URL=http://nestjs-api:3000
+      - AI_SERVICE_USERNAME=${AI_SERVICE_USERNAME:-admin}
+      - AI_SERVICE_PASSWORD=${AI_SERVICE_PASSWORD:-123456}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-minimax}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_EMBEDDING_MODEL=${MINIMAX_EMBEDDING_MODEL:-embo-01}
+      - MINIMAX_EMBEDDING_URL=${MINIMAX_EMBEDDING_URL:-https://api.minimaxi.com/v1/embeddings}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
+      - NO_PROXY=localhost,127.0.0.1,mysql,redis,go-service,nestjs-api,next-web,vue-admin,.internal,open.bigmodel.cn
+    depends_on:
+      - redis
+      - mysql
+    restart: unless-stopped
+
+  # NestJS API
+  nestjs-api:
+    build: ./nestjs-api
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=mysql://root:${MYSQL_PASSWORD}@mysql:3306/starselect
+      - REDIS_URL=redis://redis:6379
+      - AI_SERVICE_URL=http://python-ai:5000
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - mysql
+      - redis
+      - python-ai
+    restart: unless-stopped
+
+  # Next.js 前端（NEXT_PUBLIC_* 是构建期变量，通过 build.args 传入）
+  next-web:
+    build:
+      context: ./next-web
+      args:
+        NEXT_PUBLIC_API_URL: /api
+        JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3001:3001"
+    environment:
+      # 服务端内部调用 NestJS 的地址（NestJS 接口在 /v1 下，只在容器内部使用）
+      - INTERNAL_API_URL=http://nestjs-api:3000/v1
+      # 中间件在运行时读 JWT_SECRET 验签（Edge bundle 未内联，必须在运行时提供）
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - nestjs-api
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # MySQL：只绑定本机 127.0.0.1，不暴露到公网（上线后保持这样，不要对外开 3307）
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=starselect
+      - MYSQL_CHARSET=utf8mb4
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  mysql-data:

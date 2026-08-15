@@ -1,0 +1,19 @@
+# Next.js test image.
+#
+# Build:
+#   docker build -f next-web/Dockerfile.test -t school-system3-next-test next-web
+#
+# Installs deps and runs `npm test` which is wired to jest.
+
+FROM node:20-bookworm
+
+WORKDIR /app
+
+RUN npm config set registry https://registry.npmmirror.com/
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+CMD ["sh", "-c", "npm test"]

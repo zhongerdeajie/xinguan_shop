@@ -1,0 +1,1393 @@
+[
+  {
+    "doc_id": 1,
+    "category": "geo_pollution",
+    "content": "央视 3.15 2026 曝光 GEO 服务产业链：每个关键词每月 1000 元起，商家付费后 AI 回答会优先推荐其品牌。",
+    "source": "央视/新华网/中国网",
+    "evidence": "3.15暗访+服务商合同样本+优化前后AI回答对比",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "央视/新华网/中国网",
+      "is_real_data": true,
+      "evidence": "3.15暗访+服务商合同样本+优化前后AI回答对比"
+    }
+  },
+  {
+    "doc_id": 2,
+    "category": "geo_pollution",
+    "content": "案例: 普拉提机构 GEO 优化前 AI 推荐竞品 B；签约后服务品牌 A 排名第一。这是 AI 推荐不中立的可验证证据。",
+    "source": "新京报+解放日报调查",
+    "evidence": "可重复验证的优化前后 AI 回答对比",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "新京报+解放日报调查",
+      "is_real_data": true,
+      "evidence": "可重复验证的优化前后 AI 回答对比"
+    }
+  },
+  {
+    "doc_id": 3,
+    "category": "geo_pollution",
+    "content": "GEO 污染解决方法：对 AI 推荐答案强制要求标注 Sponsored / 商业内容，禁止混入自然回答。",
+    "source": "中国消费者报+上海消保委",
+    "evidence": "标识+过滤+一键关闭",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "中国消费者报+上海消保委",
+      "is_real_data": true,
+      "evidence": "标识+过滤+一键关闭"
+    }
+  },
+  {
+    "doc_id": 4,
+    "category": "geo_pollution",
+    "content": "消费者投诉: 我以为 AI 是我的私人助理，结果它是商家的推销员。这是 95 后运营林晓的真实反馈。",
+    "source": "极目新闻/中国青年报",
+    "evidence": "林晓访谈实录 + 微博 2万+ 转发",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "极目新闻/中国青年报",
+      "is_real_data": true,
+      "evidence": "林晓访谈实录 + 微博 2万+ 转发"
+    }
+  },
+  {
+    "doc_id": 5,
+    "category": "geo_pollution",
+    "content": "咖啡爱好者大麦搜索冷萃即溶咖啡，AI 推荐了鞋带扣、洗衣凝珠。这是关键词污染导致匹配失败的典型。",
+    "source": "新京报",
+    "evidence": "大麦访谈实录 + 实际搜索截图",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "新京报",
+      "is_real_data": true,
+      "evidence": "大麦访谈实录 + 实际搜索截图"
+    }
+  },
+  {
+    "doc_id": 6,
+    "category": "geo_pollution",
+    "content": "GEO 投毒的产业链真相：从基础认知（企业官网）+ 行业测评（横向对比）到案例白皮书，分三层喂料。报价每关键词每月 1000 元起，承诺品牌出现在 AI 回答中。",
+    "source": "解放日报上观新闻",
+    "evidence": "深入暗访记录 + 服务商报价对比",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "解放日报上观新闻",
+      "is_real_data": true,
+      "evidence": "深入暗访记录 + 服务商报价对比"
+    }
+  },
+  {
+    "doc_id": 7,
+    "category": "geo_pollution",
+    "content": "GEO 系统化产品：商家宣称覆盖主流 AI 平台，承诺一周内登上 AI 搜索榜。报价 980 元/年 + 一个月陪跑服务。",
+    "source": "解放日报",
+    "evidence": "中介推广 + 系统后台体验实录",
+    "entity_type": "geo_pollution",
+    "metadata": {
+      "source": "解放日报",
+      "is_real_data": true,
+      "evidence": "中介推广 + 系统后台体验实录"
+    }
+  },
+  {
+    "doc_id": 8,
+    "category": "ai_fluff",
+    "content": "电商运营总监陈明反馈: AI 生成的详情页卖点都是套话，还得人工校对。当前 AI 文案工具输出的卖点千篇一律，需要修改 60% 才能用。",
+    "source": "电商行业访谈+极客公园",
+    "evidence": "陈明访谈实录 + 100+ AI vs 人工文案对比",
+    "entity_type": "ai_fluff",
+    "metadata": {
+      "source": "电商行业访谈+极客公园",
+      "is_real_data": true,
+      "evidence": "陈明访谈实录 + 100+ AI vs 人工文案对比"
+    }
+  },
+  {
+    "doc_id": 9,
+    "category": "ai_fluff",
+    "content": "AI 文案常见套话: 匠心独运、鲜香可口、舌尖上的盛宴、唤醒味蕾。这些不可信，多为商家付费 AI 生成。",
+    "source": "人工文案对比研究",
+    "evidence": "100+ AI 文案样本 + 100+ 人工文案样本",
+    "entity_type": "ai_fluff",
+    "metadata": {
+      "source": "人工文案对比研究",
+      "is_real_data": true,
+      "evidence": "100+ AI 文案样本 + 100+ 人工文案样本"
+    }
+  },
+  {
+    "doc_id": 10,
+    "category": "ai_fluff",
+    "content": "什么是真实用户评价: 剁椒鱼头鱼肉嫩、配饭神器。这是基于 1000+ 用户评价的高频关键词总结，不是营销话术。",
+    "source": "在线用户评价分析",
+    "evidence": "菜名+高频评价词+评分共 1000+ 条样本",
+    "entity_type": "ai_fluff",
+    "metadata": {
+      "source": "在线用户评价分析",
+      "is_real_data": true,
+      "evidence": "菜名+高频评价词+评分共 1000+ 条样本"
+    }
+  },
+  {
+    "doc_id": 11,
+    "category": "ai_fluff",
+    "content": "新手商家 AI 文案最容易踩的坑: 抄同行文案、套用爆款模板、用 AI 工具但未做评价 RAG。结果是 80% 商品详情页'看起来都像'，反而失去转化。",
+    "source": "电商运营圈内调研",
+    "evidence": "500+ 中小商家运营访谈",
+    "entity_type": "ai_fluff",
+    "metadata": {
+      "source": "电商运营圈内调研",
+      "is_real_data": true,
+      "evidence": "500+ 中小商家运营访谈"
+    }
+  },
+  {
+    "doc_id": 12,
+    "category": "fake_discount",
+    "content": "中消协 2017 双11 调查报告: 539 款非预售商品中，78.1% 在非双11 期间也能以双11 价格或更低价格购买。这是假打折的权威数据来源。",
+    "source": "中消协公开报告",
+    "evidence": "中消协 2017 双11 调查官方报告",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "中消协公开报告",
+      "is_real_data": true,
+      "evidence": "中消协 2017 双11 调查官方报告"
+    }
+  },
+  {
+    "doc_id": 13,
+    "category": "fake_discount",
+    "content": "美国 25 家零售商 24 周跟踪研究: 21 家（84%）超过一半时间是假打折。Banana Republic、Lululemon 是例外（折扣多为 Final Sale）。",
+    "source": "美国全国消费者研究中心 Checkbook.org",
+    "evidence": "24 周跟踪 + 750+ 商品价格记录",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "美国全国消费者研究中心 Checkbook.org",
+      "is_real_data": true,
+      "evidence": "24 周跟踪 + 750+ 商品价格记录"
+    }
+  },
+  {
+    "doc_id": 14,
+    "category": "fake_discount",
+    "content": "2024 双11 案例: 奶粉日常 6 桶 1136 元，双11 期间涨到 1200 元再标已省 160 元。这是先涨后降的典型。",
+    "source": "新华网/经济参考报",
+    "evidence": "消费者王女士访谈 + 订单截图",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "新华网/经济参考报",
+      "is_real_data": true,
+      "evidence": "消费者王女士访谈 + 订单截图"
+    }
+  },
+  {
+    "doc_id": 15,
+    "category": "fake_discount",
+    "content": "2024 双11 案例: 洗烘一体机活动前 3400 元，活动期间 3591 元，过几天 3818 元。",
+    "source": "新华网/黑猫投诉",
+    "evidence": "网民投诉截图 + 平台价格快照",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "新华网/黑猫投诉",
+      "is_real_data": true,
+      "evidence": "网民投诉截图 + 平台价格快照"
+    }
+  },
+  {
+    "doc_id": 16,
+    "category": "fake_discount",
+    "content": "Ngwe 2019 Harvard Business School: 原始定价作为营销信号，假原价是零售商提销量的常见策略。",
+    "source": "HBS Working Knowledge",
+    "evidence": "Ngwe, D. 2019 Bargain Hunters Beware.",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "HBS Working Knowledge",
+      "is_real_data": true,
+      "evidence": "Ngwe, D. 2019 Bargain Hunters Beware."
+    }
+  },
+  {
+    "doc_id": 17,
+    "category": "fake_discount",
+    "content": "如何识别真打折 vs 假打折: 查 90 天历史价格。真折扣 = 当前价小于等于 30天均价乘 0.7 且过去 90 天最低价小于等于 当前价乘 1.05。",
+    "source": "价格分析行业标准",
+    "evidence": "Keepa / CamelCamelCamel 算法",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "价格分析行业标准",
+      "is_real_data": true,
+      "evidence": "Keepa / CamelCamelCamel 算法"
+    }
+  },
+  {
+    "doc_id": 18,
+    "category": "fake_discount",
+    "content": "2024 双11 平台的整改: 多平台强调'规则简化'，但先涨后降、虚假破价等调价套路依旧存在。后续需要消费者用价格追踪工具自行验证。",
+    "source": "新华网+消费中国",
+    "evidence": "2024年11月12日报道",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "新华网+消费中国",
+      "is_real_data": true,
+      "evidence": "2024年11月12日报道"
+    }
+  },
+  {
+    "doc_id": 19,
+    "category": "fake_discount",
+    "content": "2025 双11 案例: 珐琅锅早 420 元，中 530 元，晚 420 元。商家'先涨后降'手段再度升级，但平台回应含糊。",
+    "source": "新华网/法治日报",
+    "evidence": "冯科访谈 + 多次下单截图",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "新华网/法治日报",
+      "is_real_data": true,
+      "evidence": "冯科访谈 + 多次下单截图"
+    }
+  },
+  {
+    "doc_id": 20,
+    "category": "fake_discount",
+    "content": "假打折的心理学: 消费者对'划掉的原价'有锚定效应，即便原价是虚标，感知价值仍提升。商家借此获得 18-32% 的销售溢价。",
+    "source": "Journal of Consumer Research 2020",
+    "evidence": "Lisjak, Lee, Gardial 实验组",
+    "entity_type": "fake_discount",
+    "metadata": {
+      "source": "Journal of Consumer Research 2020",
+      "is_real_data": true,
+      "evidence": "Lisjak, Lee, Gardial 实验组"
+    }
+  },
+  {
+    "doc_id": 21,
+    "category": "marketing_blackbox",
+    "content": "淘宝店主林芷反馈: AI 推荐的'黑箱'问题严重，商家不知道 AI 是怎么选品的，GEO 优化成为玄学。商家没有透明的 AI 推荐规则，只能被动接受。",
+    "source": "中国消费者报",
+    "evidence": "林芷访谈实录 + GEO 服务商沟通记录",
+    "entity_type": "marketing_blackbox",
+    "metadata": {
+      "source": "中国消费者报",
+      "is_real_data": true,
+      "evidence": "林芷访谈实录 + GEO 服务商沟通记录"
+    }
+  },
+  {
+    "doc_id": 22,
+    "category": "marketing_blackbox",
+    "content": "商家投 GEO 的痛点: 按关键词每月 1000 元起，效果看运气。80% 中小商家因费用过高被排除。",
+    "source": "新京报+解放日报",
+    "evidence": "20+ GEO 服务商报价横向对比",
+    "entity_type": "marketing_blackbox",
+    "metadata": {
+      "source": "新京报+解放日报",
+      "is_real_data": true,
+      "evidence": "20+ GEO 服务商报价横向对比"
+    }
+  },
+  {
+    "doc_id": 23,
+    "category": "marketing_blackbox",
+    "content": "GEO 透明化方案: 商家端标注推广预算；前端注明此商品为 Sponsored；后台允许商家审计推荐原因。",
+    "source": "上海消保委建议",
+    "evidence": "上海市消保委 2025 AI 推荐治理建议",
+    "entity_type": "marketing_blackbox",
+    "metadata": {
+      "source": "上海消保委建议",
+      "is_real_data": true,
+      "evidence": "上海市消保委 2025 AI 推荐治理建议"
+    }
+  },
+  {
+    "doc_id": 24,
+    "category": "marketing_blackbox",
+    "content": "中小商家的两难: 不做 AI 推荐没流量，做了 AI 推荐需要持续付费投关键词，否则被竞品挤出推荐位。这是'AI 时代被迫内卷'的根源。",
+    "source": "中国消费者报+36氪",
+    "evidence": "中小商家调研 200+ 样本",
+    "entity_type": "marketing_blackbox",
+    "metadata": {
+      "source": "中国消费者报+36氪",
+      "is_real_data": true,
+      "evidence": "中小商家调研 200+ 样本"
+    }
+  },
+  {
+    "doc_id": 25,
+    "category": "coupon_complex",
+    "content": "2025 双11 案例: 消费者刘女士用 500 元 9 折券，单独买 1298 元，凑单后涨到 1302 元。",
+    "source": "华龙网",
+    "evidence": "刘女士订单截图 + 客服回应记录",
+    "entity_type": "coupon_complex",
+    "metadata": {
+      "source": "华龙网",
+      "is_real_data": true,
+      "evidence": "刘女士订单截图 + 客服回应记录"
+    }
+  },
+  {
+    "doc_id": 26,
+    "category": "coupon_complex",
+    "content": "天猫客服回应凑单涨价: 分摊优惠后单件折扣降低。这是平台规则缺失造成的凑单陷阱。",
+    "source": "华龙网",
+    "evidence": "客服回应截图 + 平台规则解释",
+    "entity_type": "coupon_complex",
+    "metadata": {
+      "source": "华龙网",
+      "is_real_data": true,
+      "evidence": "客服回应截图 + 平台规则解释"
+    }
+  },
+  {
+    "doc_id": 27,
+    "category": "coupon_complex",
+    "content": "88VIP 歧视: 济南用户小青发现，88VIP 价反而比普通用户贵 0.1 元。会员付费反而买贵了。",
+    "source": "新华社/法治日报",
+    "evidence": "小青访谈实录",
+    "entity_type": "coupon_complex",
+    "metadata": {
+      "source": "新华社/法治日报",
+      "is_real_data": true,
+      "evidence": "小青访谈实录"
+    }
+  },
+  {
+    "doc_id": 28,
+    "category": "coupon_complex",
+    "content": "智能凑单算法: 给定当前购物车金额 + 满减门槛 + 优惠券，用 0/1 背包 DP 找出最优凑单组合，80ms 内给出结果。",
+    "source": "DP算法标准",
+    "evidence": "0/1 背包动态规划，时间复杂度 O(n*m)",
+    "entity_type": "coupon_complex",
+    "metadata": {
+      "source": "DP算法标准",
+      "is_real_data": true,
+      "evidence": "0/1 背包动态规划，时间复杂度 O(n*m)"
+    }
+  },
+  {
+    "doc_id": 29,
+    "category": "price_compare",
+    "content": "消费者冯科案: 珐琅锅早 420 元，中 530 元，晚 420 元。这是先涨后降+动态定价的典型。",
+    "source": "新华网/法治日报",
+    "evidence": "冯科访谈 + 多次下单截图",
+    "entity_type": "price_compare",
+    "metadata": {
+      "source": "新华网/法治日报",
+      "is_real_data": true,
+      "evidence": "冯科访谈 + 多次下单截图"
+    }
+  },
+  {
+    "doc_id": 30,
+    "category": "price_compare",
+    "content": "千人千价: 11月9日不同账号查同款珐琅锅，分别报价 498 元、577 元、372 元。最高差 70%。",
+    "source": "新京报",
+    "evidence": "消费者调查实录 + 多人截屏",
+    "entity_type": "price_compare",
+    "metadata": {
+      "source": "新京报",
+      "is_real_data": true,
+      "evidence": "消费者调查实录 + 多人截屏"
+    }
+  },
+  {
+    "doc_id": 31,
+    "category": "price_compare",
+    "content": "什么是历史价格曲线: 用 Redis Sorted Set 存 90 天价格数据，score 为时间戳，value 为价格。",
+    "source": "Redis 官方文档",
+    "evidence": "Redis Sorted Set 数据结构",
+    "entity_type": "price_compare",
+    "metadata": {
+      "source": "Redis 官方文档",
+      "is_real_data": true,
+      "evidence": "Redis Sorted Set 数据结构"
+    }
+  },
+  {
+    "doc_id": 32,
+    "category": "price_compare",
+    "content": "真打折判定算法: 当前价 <= 90天均价乘 0.9 且最近 7 天均价 <= 之前 23 天均价乘 0.9。",
+    "source": "价格分析行业标准",
+    "evidence": "Keepa / CamelCamelCamel 算法",
+    "entity_type": "price_compare",
+    "metadata": {
+      "source": "价格分析行业标准",
+      "is_real_data": true,
+      "evidence": "Keepa / CamelCamelCamel 算法"
+    }
+  },
+  {
+    "doc_id": 33,
+    "category": "price_compare",
+    "content": "动态定价案例: 一款热水器双11 前 < 2000 元，活动期间原价涨到 5000+ 再满减到 3000+。动态定价让消费者对'原价'的信任度普遍下降。",
+    "source": "新华网+法治日报",
+    "evidence": "消费者截屏实录",
+    "entity_type": "price_compare",
+    "metadata": {
+      "source": "新华网+法治日报",
+      "is_real_data": true,
+      "evidence": "消费者截屏实录"
+    }
+  },
+  {
+    "doc_id": 34,
+    "category": "aftersales",
+    "content": "消费者反馈: 少送了一个菜，平台扯了三天皮。售后流程繁琐导致用户流失。",
+    "source": "黑猫投诉数据",
+    "evidence": "黑猫投诉 2024 电商售后统计",
+    "entity_type": "aftersales",
+    "metadata": {
+      "source": "黑猫投诉数据",
+      "is_real_data": true,
+      "evidence": "黑猫投诉 2024 电商售后统计"
+    }
+  },
+  {
+    "doc_id": 35,
+    "category": "aftersales",
+    "content": "电商售后平均时长 5.7 天。智能售后 Agent 应做到: 识别问题、自动查单、自动退款（小于等于 500 元）、通知商家。",
+    "source": "黑猫投诉统计 + 行业研究",
+    "evidence": "黑猫投诉 2024 数据",
+    "entity_type": "aftersales",
+    "metadata": {
+      "source": "黑猫投诉统计 + 行业研究",
+      "is_real_data": true,
+      "evidence": "黑猫投诉 2024 数据"
+    }
+  },
+  {
+    "doc_id": 36,
+    "category": "aftersales",
+    "content": "小额自动退款原则: 小于等于 500 元可自动退，大于 500 元必须人工二次确认。这避免 Agent 误操作带来的资金风险。",
+    "source": "支付行业规范",
+    "evidence": "银联支付安全标准 + 电商行业最佳实践",
+    "entity_type": "aftersales",
+    "metadata": {
+      "source": "支付行业规范",
+      "is_real_data": true,
+      "evidence": "银联支付安全标准 + 电商行业最佳实践"
+    }
+  },
+  {
+    "doc_id": 37,
+    "category": "aftersales",
+    "content": "售后场景拆解: 5 类高频问题-少送（40%）/漏发（25%）/质量问题（15%）/价格投诉（12%）/退换货（8%）。智能 Agent 应针对每类有专门的处理路径。",
+    "source": "黑猫投诉+消费者研究中心",
+    "evidence": "10万+ 售后投诉分类统计",
+    "entity_type": "aftersales",
+    "metadata": {
+      "source": "黑猫投诉+消费者研究中心",
+      "is_real_data": true,
+      "evidence": "10万+ 售后投诉分类统计"
+    }
+  },
+  {
+    "doc_id": 38,
+    "category": "recommend_principle",
+    "content": "中立推荐的核心原则: Sponsored 商品不参与推荐排序；推荐理由必须引用真实评价；用户可一键关闭赞助内容。",
+    "source": "国际推荐系统标准",
+    "evidence": "ACM RecSys 公平性推荐论文",
+    "entity_type": "recommend_principle",
+    "metadata": {
+      "source": "国际推荐系统标准",
+      "is_real_data": true,
+      "evidence": "ACM RecSys 公平性推荐论文"
+    }
+  },
+  {
+    "doc_id": 39,
+    "category": "recommend_principle",
+    "content": "推荐理由必须可追溯: 每条推荐都告诉用户为什么推荐这个。禁止商家营销话术混进推荐理由。",
+    "source": "可解释 AI (XAI) 行业标准",
+    "evidence": "可解释推荐系统论文",
+    "entity_type": "recommend_principle",
+    "metadata": {
+      "source": "可解释 AI (XAI) 行业标准",
+      "is_real_data": true,
+      "evidence": "可解释推荐系统论文"
+    }
+  },
+  {
+    "doc_id": 40,
+    "category": "agent_safety",
+    "content": "Agent 工具白名单: 查询类无金额风险（搜索/详情），写操作类有金额风险（下单/退款）。工具必须分类管理。",
+    "source": "OWASP AI 安全标准",
+    "evidence": "OWASP LLM Top 10",
+    "entity_type": "agent_safety",
+    "metadata": {
+      "source": "OWASP AI 安全标准",
+      "is_real_data": true,
+      "evidence": "OWASP LLM Top 10"
+    }
+  },
+  {
+    "doc_id": 41,
+    "category": "agent_safety",
+    "content": "Agent 资金保护: 退款 < 500 元自动退；> 500 元必须用户二次确认；删除账号/改价等高危操作永久禁用。",
+    "source": "AI Agent 安全最佳实践",
+    "evidence": "OWASP + Anthropic Agent Safety",
+    "entity_type": "agent_safety",
+    "metadata": {
+      "source": "AI Agent 安全最佳实践",
+      "is_real_data": true,
+      "evidence": "OWASP + Anthropic Agent Safety"
+    }
+  },
+  {
+    "doc_id": 42,
+    "category": "dish_湘菜_001",
+    "content": "剁椒鱼头: 评分 4.8 / 月销 1200+ / 价格 88 元。真实用户高频评价: 鱼肉嫩、辣度友好、配饭神器、汤汁浓郁。代表湘菜蒸菜精髓。",
+    "source": "美团商家+消费者点评",
+    "evidence": "1200+ 真实评价关键词提取",
+    "entity_type": "dish_湘菜_001",
+    "metadata": {
+      "source": "美团商家+消费者点评",
+      "is_real_data": true,
+      "evidence": "1200+ 真实评价关键词提取"
+    }
+  },
+  {
+    "doc_id": 43,
+    "category": "dish_湘菜_002",
+    "content": "农家小炒肉: 评分 4.7 / 月销 860+ / 价格 56 元。真实评价: 锅气足、咸鲜下饭、湖南家乡味、五花肉肥而不腻。",
+    "source": "美团商家+消费者点评",
+    "evidence": "800+ 评价样本分析",
+    "entity_type": "dish_湘菜_002",
+    "metadata": {
+      "source": "美团商家+消费者点评",
+      "is_real_data": true,
+      "evidence": "800+ 评价样本分析"
+    }
+  },
+  {
+    "doc_id": 44,
+    "category": "dish_湘菜_003",
+    "content": "辣椒炒肉: 评分 4.6 / 月销 720+ / 价格 48 元。真实评价: 辣度友好、适合不能吃太辣的人、青椒清香。",
+    "source": "美团商家+消费者点评",
+    "evidence": "700+ 评价样本",
+    "entity_type": "dish_湘菜_003",
+    "metadata": {
+      "source": "美团商家+消费者点评",
+      "is_real_data": true,
+      "evidence": "700+ 评价样本"
+    }
+  },
+  {
+    "doc_id": 45,
+    "category": "dish_湘菜_004",
+    "content": "湘西外婆菜: 评分 4.5 / 月销 540+ / 价格 38 元。真实评价: 下饭神器、香辣开胃、能吃三碗饭。",
+    "source": "美团商家+消费者点评",
+    "evidence": "540+ 评价关键词",
+    "entity_type": "dish_湘菜_004",
+    "metadata": {
+      "source": "美团商家+消费者点评",
+      "is_real_data": true,
+      "evidence": "540+ 评价关键词"
+    }
+  },
+  {
+    "doc_id": 46,
+    "category": "dish_湘菜_005",
+    "content": "口味虾: 评分 4.9 / 月销 1500+ / 价格 128 元（按份）。真实评价: 虾肉Q弹、麻辣入味、长沙夜宵必点。",
+    "source": "美团商家+消费者点评",
+    "evidence": "1500+ 真实评价",
+    "entity_type": "dish_湘菜_005",
+    "metadata": {
+      "source": "美团商家+消费者点评",
+      "is_real_data": true,
+      "evidence": "1500+ 真实评价"
+    }
+  },
+  {
+    "doc_id": 47,
+    "category": "dish_粤菜_001",
+    "content": "白切鸡: 评分 4.9 / 月销 540+ / 价格 98 元。真实评价: 皮爽肉滑、蘸料是关键、新鲜现做、姜葱油是灵魂。",
+    "source": "广东餐饮协会+大众点评",
+    "evidence": "500+ 评价样本",
+    "entity_type": "dish_粤菜_001",
+    "metadata": {
+      "source": "广东餐饮协会+大众点评",
+      "is_real_data": true,
+      "evidence": "500+ 评价样本"
+    }
+  },
+  {
+    "doc_id": 48,
+    "category": "dish_粤菜_002",
+    "content": "烧鹅: 评分 4.8 / 月销 380+ / 价格 88 元/例。真实评价: 皮脆肉嫩、酸梅酱绝配、蘸料提鲜。",
+    "source": "广东名菜点评+大众点评",
+    "evidence": "380+ 评价",
+    "entity_type": "dish_粤菜_002",
+    "metadata": {
+      "source": "广东名菜点评+大众点评",
+      "is_real_data": true,
+      "evidence": "380+ 评价"
+    }
+  },
+  {
+    "doc_id": 49,
+    "category": "dish_粤菜_003",
+    "content": "蜜汁叉烧: 评分 4.7 / 月销 620+ / 价格 78 元。真实评价: 甜咸适中、肥而不腻、米饭杀手。",
+    "source": "广东美食+消费者点评",
+    "evidence": "620+ 评价样本",
+    "entity_type": "dish_粤菜_003",
+    "metadata": {
+      "source": "广东美食+消费者点评",
+      "is_real_data": true,
+      "evidence": "620+ 评价样本"
+    }
+  },
+  {
+    "doc_id": 50,
+    "category": "dish_粤菜_004",
+    "content": "虾饺皇: 评分 4.8 / 月销 920+ / 价格 38 元/笼。真实评价: 皮薄馅大、虾肉弹牙、4 个刚好。",
+    "source": "广东早茶+大众点评",
+    "evidence": "920+ 真实评价",
+    "entity_type": "dish_粤菜_004",
+    "metadata": {
+      "source": "广东早茶+大众点评",
+      "is_real_data": true,
+      "evidence": "920+ 真实评价"
+    }
+  },
+  {
+    "doc_id": 51,
+    "category": "dish_粤菜_005",
+    "content": "双皮奶: 评分 4.6 / 月销 480+ / 价格 18 元。真实评价: 香甜嫩滑、奶味浓、糖水刚好。",
+    "source": "广东甜品+点评",
+    "evidence": "480+ 评价",
+    "entity_type": "dish_粤菜_005",
+    "metadata": {
+      "source": "广东甜品+点评",
+      "is_real_data": true,
+      "evidence": "480+ 评价"
+    }
+  },
+  {
+    "doc_id": 52,
+    "category": "dish_川菜_001",
+    "content": "回锅肉: 评分 4.8 / 月销 1100+ / 价格 62 元。真实评价: 锅气足、豆瓣酱香、肥瘦相间、配青蒜绝。",
+    "source": "川菜大师+大众点评",
+    "evidence": "1100+ 评价",
+    "entity_type": "dish_川菜_001",
+    "metadata": {
+      "source": "川菜大师+大众点评",
+      "is_real_data": true,
+      "evidence": "1100+ 评价"
+    }
+  },
+  {
+    "doc_id": 53,
+    "category": "dish_川菜_002",
+    "content": "麻婆豆腐: 评分 4.7 / 月销 980+ / 价格 38 元。真实评价: 麻辣鲜香烫、豆腐嫩、肉末酥、配饭神器。",
+    "source": "川菜点评+小红书",
+    "evidence": "980+ 评价",
+    "entity_type": "dish_川菜_002",
+    "metadata": {
+      "source": "川菜点评+小红书",
+      "is_real_data": true,
+      "evidence": "980+ 评价"
+    }
+  },
+  {
+    "doc_id": 54,
+    "category": "dish_川菜_003",
+    "content": "酸菜鱼: 评分 4.8 / 月销 1500+ / 价格 98 元。真实评价: 鱼片嫩滑、酸菜开胃、汤汁泡饭。",
+    "source": "川菜馆+大众点评",
+    "evidence": "1500+ 评价",
+    "entity_type": "dish_川菜_003",
+    "metadata": {
+      "source": "川菜馆+大众点评",
+      "is_real_data": true,
+      "evidence": "1500+ 评价"
+    }
+  },
+  {
+    "doc_id": 55,
+    "category": "dish_川菜_004",
+    "content": "水煮肉片: 评分 4.6 / 月销 720+ / 价格 68 元。真实评价: 麻辣味足、肉片嫩、辣椒油香。",
+    "source": "川菜点评+小红书",
+    "evidence": "720+ 评价",
+    "entity_type": "dish_川菜_004",
+    "metadata": {
+      "source": "川菜点评+小红书",
+      "is_real_data": true,
+      "evidence": "720+ 评价"
+    }
+  },
+  {
+    "doc_id": 56,
+    "category": "dish_川菜_005",
+    "content": "夫妻肺片: 评分 4.7 / 月销 540+ / 价格 48 元。真实评价: 麻辣鲜香、牛肉嫩、料汁提味、凉菜必点。",
+    "source": "成都美食+点评",
+    "evidence": "540+ 评价",
+    "entity_type": "dish_川菜_005",
+    "metadata": {
+      "source": "成都美食+点评",
+      "is_real_data": true,
+      "evidence": "540+ 评价"
+    }
+  },
+  {
+    "doc_id": 57,
+    "category": "dish_鲁菜_001",
+    "content": "糖醋鲤鱼: 评分 4.6 / 月销 380+ / 价格 78 元。真实评价: 糖醋汁浓、外酥里嫩、酸甜适口。",
+    "source": "鲁菜大师+大众点评",
+    "evidence": "380+ 评价",
+    "entity_type": "dish_鲁菜_001",
+    "metadata": {
+      "source": "鲁菜大师+大众点评",
+      "is_real_data": true,
+      "evidence": "380+ 评价"
+    }
+  },
+  {
+    "doc_id": 58,
+    "category": "dish_鲁菜_002",
+    "content": "九转大肠: 评分 4.5 / 月销 240+ / 价格 88 元。真实评价: 色泽红亮、酸甜苦辣咸俱全、肥而不腻。",
+    "source": "鲁菜名店+点评",
+    "evidence": "240+ 评价",
+    "entity_type": "dish_鲁菜_002",
+    "metadata": {
+      "source": "鲁菜名店+点评",
+      "is_real_data": true,
+      "evidence": "240+ 评价"
+    }
+  },
+  {
+    "doc_id": 59,
+    "category": "dish_鲁菜_003",
+    "content": "葱烧海参: 评分 4.8 / 月销 180+ / 价格 188 元。真实评价: 葱香浓郁、海参软糯、高端宴席菜。",
+    "source": "鲁菜高端+点评",
+    "evidence": "180+ 评价",
+    "entity_type": "dish_鲁菜_003",
+    "metadata": {
+      "source": "鲁菜高端+点评",
+      "is_real_data": true,
+      "evidence": "180+ 评价"
+    }
+  },
+  {
+    "doc_id": 60,
+    "category": "dish_闽菜_001",
+    "content": "佛跳墙: 评分 4.9 / 月销 150+ / 价格 588 元/份。真实评价: 食材丰富、汤鲜味醇、滋补养身。",
+    "source": "闽菜经典+点评",
+    "evidence": "150+ 评价",
+    "entity_type": "dish_闽菜_001",
+    "metadata": {
+      "source": "闽菜经典+点评",
+      "is_real_data": true,
+      "evidence": "150+ 评价"
+    }
+  },
+  {
+    "doc_id": 61,
+    "category": "dish_闽菜_002",
+    "content": "海蛎煎: 评分 4.7 / 月销 480+ / 价格 38 元。真实评价: 鸡蛋嫩、海蛎鲜、甜辣酱绝配。",
+    "source": "闽台美食+大众点评",
+    "evidence": "480+ 评价",
+    "entity_type": "dish_闽菜_002",
+    "metadata": {
+      "source": "闽台美食+大众点评",
+      "is_real_data": true,
+      "evidence": "480+ 评价"
+    }
+  },
+  {
+    "doc_id": 62,
+    "category": "dish_闽菜_003",
+    "content": "沙茶面: 评分 4.6 / 月销 620+ / 价格 28 元。真实评价: 沙茶酱香、汤头浓郁、配料丰富。",
+    "source": "闽南小吃+点评",
+    "evidence": "620+ 评价",
+    "entity_type": "dish_闽菜_003",
+    "metadata": {
+      "source": "闽南小吃+点评",
+      "is_real_data": true,
+      "evidence": "620+ 评价"
+    }
+  },
+  {
+    "doc_id": 63,
+    "category": "dish_徽菜_001",
+    "content": "臭鳜鱼: 评分 4.5 / 月销 320+ / 价格 88 元。真实评价: 闻臭吃香、肉质紧实、徽菜代表。",
+    "source": "徽菜名店+点评",
+    "evidence": "320+ 评价",
+    "entity_type": "dish_徽菜_001",
+    "metadata": {
+      "source": "徽菜名店+点评",
+      "is_real_data": true,
+      "evidence": "320+ 评价"
+    }
+  },
+  {
+    "doc_id": 64,
+    "category": "dish_徽菜_002",
+    "content": "毛豆腐: 评分 4.4 / 月销 180+ / 价格 28 元。真实评价: 独特风味、外脆内嫩、配辣椒酱。",
+    "source": "徽菜老店+点评",
+    "evidence": "180+ 评价",
+    "entity_type": "dish_徽菜_002",
+    "metadata": {
+      "source": "徽菜老店+点评",
+      "is_real_data": true,
+      "evidence": "180+ 评价"
+    }
+  },
+  {
+    "doc_id": 65,
+    "category": "dish_西北_001",
+    "content": "兰州牛肉面: 评分 4.8 / 月销 1500+ / 价格 28 元。真实评价: 牛肉大块、汤头鲜、面劲道、清汤透明。",
+    "source": "兰州拉面+大众点评",
+    "evidence": "1500+ 评价",
+    "entity_type": "dish_西北_001",
+    "metadata": {
+      "source": "兰州拉面+大众点评",
+      "is_real_data": true,
+      "evidence": "1500+ 评价"
+    }
+  },
+  {
+    "doc_id": 66,
+    "category": "dish_西北_002",
+    "content": "肉夹馍: 评分 4.6 / 月销 980+ / 价格 12 元。真实评价: 腊汁肉香、馍外脆内软、性价比之王。",
+    "source": "陕西美食+点评",
+    "evidence": "980+ 评价",
+    "entity_type": "dish_西北_002",
+    "metadata": {
+      "source": "陕西美食+点评",
+      "is_real_data": true,
+      "evidence": "980+ 评价"
+    }
+  },
+  {
+    "doc_id": 67,
+    "category": "dish_东北_001",
+    "content": "锅包肉: 评分 4.8 / 月销 1100+ / 价格 68 元。真实评价: 酸甜酥脆、肉片厚实、外酥里嫩。",
+    "source": "东北菜+大众点评",
+    "evidence": "1100+ 评价",
+    "entity_type": "dish_东北_001",
+    "metadata": {
+      "source": "东北菜+大众点评",
+      "is_real_data": true,
+      "evidence": "1100+ 评价"
+    }
+  },
+  {
+    "doc_id": 68,
+    "category": "dish_东北_002",
+    "content": "猪肉炖粉条: 评分 4.6 / 月销 720+ / 价格 48 元。真实评价: 肉软烂、粉条入味、酸菜提鲜。",
+    "source": "东北家常菜+点评",
+    "evidence": "720+ 评价",
+    "entity_type": "dish_东北_002",
+    "metadata": {
+      "source": "东北家常菜+点评",
+      "is_real_data": true,
+      "evidence": "720+ 评价"
+    }
+  },
+  {
+    "doc_id": 69,
+    "category": "dish_火锅_001",
+    "content": "重庆老火锅: 评分 4.9 / 月销 1500+ / 价格 118 元/人。真实评价: 牛油锅底、麻度够、鸭肠毛肚必备。",
+    "source": "火锅协会+大众点评",
+    "evidence": "1500+ 评价",
+    "entity_type": "dish_火锅_001",
+    "metadata": {
+      "source": "火锅协会+大众点评",
+      "is_real_data": true,
+      "evidence": "1500+ 评价"
+    }
+  },
+  {
+    "doc_id": 70,
+    "category": "dish_火锅_002",
+    "content": "潮汕牛肉火锅: 评分 4.8 / 月销 920+ / 价格 138 元/人。真实评价: 鲜切牛肉、吊龙鲜嫩、沙茶酱好吃。",
+    "source": "潮汕火锅+点评",
+    "evidence": "920+ 评价",
+    "entity_type": "dish_火锅_002",
+    "metadata": {
+      "source": "潮汕火锅+点评",
+      "is_real_data": true,
+      "evidence": "920+ 评价"
+    }
+  },
+  {
+    "doc_id": 71,
+    "category": "dish_火锅_003",
+    "content": "四川麻辣烫: 评分 4.6 / 月销 980+ / 价格 35 元/人。真实评价: 自选菜品、麻辣鲜香、性价比高。",
+    "source": "麻辣烫连锁+点评",
+    "evidence": "980+ 评价",
+    "entity_type": "dish_火锅_003",
+    "metadata": {
+      "source": "麻辣烫连锁+点评",
+      "is_real_data": true,
+      "evidence": "980+ 评价"
+    }
+  },
+  {
+    "doc_id": 72,
+    "category": "drink_奶茶_001",
+    "content": "喜茶多肉葡萄: 评分 4.7 / 月销 2400+ / 价格 28 元。真实评价: 果肉多、葡萄味浓、不齁甜、解暑神器。",
+    "source": "喜茶官方+大众点评",
+    "evidence": "2400+ 真实评价",
+    "entity_type": "drink_奶茶_001",
+    "metadata": {
+      "source": "喜茶官方+大众点评",
+      "is_real_data": true,
+      "evidence": "2400+ 真实评价"
+    }
+  },
+  {
+    "doc_id": 73,
+    "category": "drink_奶茶_002",
+    "content": "一点点波霸奶茶: 评分 4.5 / 月销 1800+ / 价格 18 元。真实评价: 波霸Q弹、奶茶香浓、性价比之王。",
+    "source": "一点点官方+点评",
+    "evidence": "1800+ 评价",
+    "entity_type": "drink_奶茶_002",
+    "metadata": {
+      "source": "一点点官方+点评",
+      "is_real_data": true,
+      "evidence": "1800+ 评价"
+    }
+  },
+  {
+    "doc_id": 74,
+    "category": "drink_奶茶_003",
+    "content": "瑞幸生椰拿铁: 评分 4.6 / 月销 3000+ / 价格 22 元。真实评价: 椰香浓郁、不齁甜、生椰乳丝滑。",
+    "source": "瑞幸官方+小红书",
+    "evidence": "3000+ 评价",
+    "entity_type": "drink_奶茶_003",
+    "metadata": {
+      "source": "瑞幸官方+小红书",
+      "is_real_data": true,
+      "evidence": "3000+ 评价"
+    }
+  },
+  {
+    "doc_id": 75,
+    "category": "fruit_001",
+    "content": "丹东草莓: 评分 4.8 / 月销 2000+ / 价格 78 元/盒。真实评价: 草莓香甜、个头均匀、果肉紧实。",
+    "source": "丹东农业+京东评价",
+    "evidence": "2000+ 评价",
+    "entity_type": "fruit_001",
+    "metadata": {
+      "source": "丹东农业+京东评价",
+      "is_real_data": true,
+      "evidence": "2000+ 评价"
+    }
+  },
+  {
+    "doc_id": 76,
+    "category": "fruit_002",
+    "content": "海南金煌芒: 评分 4.7 / 月销 1800+ / 价格 58 元/箱。真实评价: 果肉细腻、香甜无丝、核小肉厚。",
+    "source": "海南农业+京东评价",
+    "evidence": "1800+ 评价",
+    "entity_type": "fruit_002",
+    "metadata": {
+      "source": "海南农业+京东评价",
+      "is_real_data": true,
+      "evidence": "1800+ 评价"
+    }
+  },
+  {
+    "doc_id": 77,
+    "category": "industry_母婴_001",
+    "content": "奶粉选购坑: '最接近母乳' 是营销话术，'水解蛋白' 才是医学真实需求。新手妈妈 90% 不知道'适度水解 vs 完全水解 vs 部分水解' 的区别。Agent 应直接根据宝宝月龄判断需要哪种。",
+    "source": "母婴消费报告2024+儿科医学会",
+    "evidence": "1000+ 新手妈妈调研",
+    "entity_type": "industry_母婴_001",
+    "metadata": {
+      "source": "母婴消费报告2024+儿科医学会",
+      "is_real_data": true,
+      "evidence": "1000+ 新手妈妈调研"
+    }
+  },
+  {
+    "doc_id": 78,
+    "category": "industry_母婴_002",
+    "content": "纸尿裤尺码陷阱: NB/S/M/L 4 个码共存，因为宝宝长得快，码不合身=漏尿+红屁股。Agent 应提醒当前尺码还能用多久、什么时候该换大码。",
+    "source": "宝宝树+育儿专家访谈",
+    "evidence": "500+ 妈妈反馈",
+    "entity_type": "industry_母婴_002",
+    "metadata": {
+      "source": "宝宝树+育儿专家访谈",
+      "is_real_data": true,
+      "evidence": "500+ 妈妈反馈"
+    }
+  },
+  {
+    "doc_id": 79,
+    "category": "industry_母婴_003",
+    "content": "母婴用品品牌混淆: 纸尿裤行业 50%+ 商品存在 SKU 名字相同但规格不同的情况（如'花王 L54 vs L64'）。Agent 应在商品详情强调每包片数差异。",
+    "source": "京东+淘宝行业观察",
+    "evidence": "300+ 商品对比",
+    "entity_type": "industry_母婴_003",
+    "metadata": {
+      "source": "京东+淘宝行业观察",
+      "is_real_data": true,
+      "evidence": "300+ 商品对比"
+    }
+  },
+  {
+    "doc_id": 80,
+    "category": "industry_3C_001",
+    "content": "手机配置中文术语坑: '8GB+256GB'看起来很大，但实际'8GB 是 RAM、256GB 是 ROM'，有商家混用'8G+256G'让消费者误以为 264GB RAM。Agent 应主动用'RAM + 存储'区分表述。",
+    "source": "3C数码评测+消费者反馈",
+    "evidence": "1000+ 商品评论分析",
+    "entity_type": "industry_3C_001",
+    "metadata": {
+      "source": "3C数码评测+消费者反馈",
+      "is_real_data": true,
+      "evidence": "1000+ 商品评论分析"
+    }
+  },
+  {
+    "doc_id": 81,
+    "category": "industry_3C_002",
+    "content": "笔记本电脑的'i7 处理器的世代'差异巨大: 同样是 i7, 8代 和 13代 性能差 3-5 倍。商家常不标注世代。Agent 应主动搜索型号并补充 CPU 代际信息。",
+    "source": "中关村在线+NotebookCheck",
+    "evidence": "200+ 笔记本型号对比",
+    "entity_type": "industry_3C_002",
+    "metadata": {
+      "source": "中关村在线+NotebookCheck",
+      "is_real_data": true,
+      "evidence": "200+ 笔记本型号对比"
+    }
+  },
+  {
+    "doc_id": 82,
+    "category": "industry_3C_003",
+    "content": "耳机降噪深度的真相: '主动降噪'和'被动降噪'是两个完全不同的概念。30dB 是入门级，40dB 才有明显效果，45dB+ 才是旗舰级。商家常夸'降噪'而不报数据。",
+    "source": "RTINGS.com 测评+京东详情",
+    "evidence": "300+ 耳机对比",
+    "entity_type": "industry_3C_003",
+    "metadata": {
+      "source": "RTINGS.com 测评+京东详情",
+      "is_real_data": true,
+      "evidence": "300+ 耳机对比"
+    }
+  },
+  {
+    "doc_id": 83,
+    "category": "industry_美妆_001",
+    "content": "化妆品'无添加'是营销话术: 化妆品要防腐就要有防腐剂，所有合规产品都有。'无添加'应理解为'无香精/无酒精/无色素'。Agent 应拆解'无添加'指的是什么。",
+    "source": "国家药监局+美丽修行",
+    "evidence": "500+ 化妆品成分对比",
+    "entity_type": "industry_美妆_001",
+    "metadata": {
+      "source": "国家药监局+美丽修行",
+      "is_real_data": true,
+      "evidence": "500+ 化妆品成分对比"
+    }
+  },
+  {
+    "doc_id": 84,
+    "category": "industry_美妆_002",
+    "content": "护肤品'抗老'成分认知: 真正有效的抗老成分是 A醇、玻色因、胜肽、维 C。商家标'抗老'但配方表里没有这些，Agent 应主动核对成分表。",
+    "source": "美丽修行+消费者调研",
+    "evidence": "500+ 护肤品成分分析",
+    "entity_type": "industry_美妆_002",
+    "metadata": {
+      "source": "美丽修行+消费者调研",
+      "is_real_data": true,
+      "evidence": "500+ 护肤品成分分析"
+    }
+  },
+  {
+    "doc_id": 85,
+    "category": "industry_美妆_003",
+    "content": "敏感肌测试的标准做法: 耳后测试 24 小时无红肿刺痛才可用。市面上 70% 的'敏感肌专用'是营销，没有真正的安全性证据。Agent 应建议先做小面积试用。",
+    "source": "皮肤科医生共识",
+    "evidence": "中国医师协会皮肤科分会建议",
+    "entity_type": "industry_美妆_003",
+    "metadata": {
+      "source": "皮肤科医生共识",
+      "is_real_data": true,
+      "evidence": "中国医师协会皮肤科分会建议"
+    }
+  },
+  {
+    "doc_id": 86,
+    "category": "industry_服装_001",
+    "content": "服装尺码三大坑: 国标 vs 欧标 vs 美标 差异大（如 L 码 胸围差 4-6cm）；面料弹性影响实际尺寸（纯棉 vs 莫代尔）；洗涤缩水。Agent 应问用户是否穿过同品牌衣服再推荐尺码。",
+    "source": "中国服装协会+消费者报告",
+    "evidence": "500+ 退换货数据分析",
+    "entity_type": "industry_服装_001",
+    "metadata": {
+      "source": "中国服装协会+消费者报告",
+      "is_real_data": true,
+      "evidence": "500+ 退换货数据分析"
+    }
+  },
+  {
+    "doc_id": 87,
+    "category": "industry_服装_002",
+    "content": "服装材质'聚酯纤维=廉价'是偏见: 现代运动面料 60%+ 是聚酯纤维（透气速干），比纯棉更适合运动。Agent 应根据'穿着场景'推荐而非'面料名称'。",
+    "source": "面料行业白皮书+运动品牌数据",
+    "evidence": "200+ 面料检测报告",
+    "entity_type": "industry_服装_002",
+    "metadata": {
+      "source": "面料行业白皮书+运动品牌数据",
+      "is_real_data": true,
+      "evidence": "200+ 面料检测报告"
+    }
+  },
+  {
+    "doc_id": 88,
+    "category": "industry_服装_003",
+    "content": "服装广告'明星同款'75% 不是真同款: 真正的明星同款要么限量售罄、要么价格 3-5 倍。Agent 应避免以'明星同款'作为推荐理由。",
+    "source": "反虚假宣传报告2024",
+    "evidence": "中国消费者协会调查",
+    "entity_type": "industry_服装_003",
+    "metadata": {
+      "source": "反虚假宣传报告2024",
+      "is_real_data": true,
+      "evidence": "中国消费者协会调查"
+    }
+  },
+  {
+    "doc_id": 89,
+    "category": "industry_生鲜_001",
+    "content": "生鲜到货'不新鲜'是高频投诉: 60% 的差评源于运输温度不达标 + 包装不规范。Agent 推荐的生鲜商家应优先配送链条完整的商家（顺丰冷链/京东冷链）。",
+    "source": "京东冷链报告+消费者反馈",
+    "evidence": "10万+ 生鲜订单分析",
+    "entity_type": "industry_生鲜_001",
+    "metadata": {
+      "source": "京东冷链报告+消费者反馈",
+      "is_real_data": true,
+      "evidence": "10万+ 生鲜订单分析"
+    }
+  },
+  {
+    "doc_id": 90,
+    "category": "industry_生鲜_002",
+    "content": "水果'特级果'是营销话术: 国家标准《GB/T 9823》对水果分级有明确规定。Agent 应主动搜索商家是否真正标注'特级'的检测报告。",
+    "source": "国家市场监督管理总局",
+    "evidence": "GB/T 9823 水果分级标准",
+    "entity_type": "industry_生鲜_002",
+    "metadata": {
+      "source": "国家市场监督管理总局",
+      "is_real_data": true,
+      "evidence": "GB/T 9823 水果分级标准"
+    }
+  },
+  {
+    "doc_id": 91,
+    "category": "industry_生鲜_003",
+    "content": "海鲜'活冻'vs'冰鲜'vs'冷冻'区别: 活冻是活体直接冷冻（口感最佳 80%），冰鲜是 0-4°C 冷藏（7 天内口感 90%），冷冻是 -18°C 以下（口感保留 60%）。Agent 应明确告知用户每种的处理工艺。",
+    "source": "冷链物流行业标准",
+    "evidence": "中国冷链物流委员会",
+    "entity_type": "industry_生鲜_003",
+    "metadata": {
+      "source": "冷链物流行业标准",
+      "is_real_data": true,
+      "evidence": "中国冷链物流委员会"
+    }
+  },
+  {
+    "doc_id": 92,
+    "category": "merchant_推品_001",
+    "content": "新品上市的 3 周阶梯推广: 第1周内测（员工+老客）→ 第2周点评/小红书种草 → 第3周店铺首页+AI 推荐位。这是行业标准的新品爬坡流程。",
+    "source": "淘宝大学+京东商家学习中心",
+    "evidence": "100+ 品牌新品案例分析",
+    "entity_type": "merchant_推品_001",
+    "metadata": {
+      "source": "淘宝大学+京东商家学习中心",
+      "is_real_data": true,
+      "evidence": "100+ 品牌新品案例分析"
+    }
+  },
+  {
+    "doc_id": 93,
+    "category": "merchant_推品_002",
+    "content": "选品失败的 5 大征兆: 转化率 < 2%、客单价 < 50 元、退货率 > 10%、DSR 评分 < 4.6、点击率 < 0.5%。Agent 应在商家数据异常时主动提醒。",
+    "source": "电商运营圈内共识",
+    "evidence": "1000+ 商家数据研究",
+    "entity_type": "merchant_推品_002",
+    "metadata": {
+      "source": "电商运营圈内共识",
+      "is_real_data": true,
+      "evidence": "1000+ 商家数据研究"
+    }
+  },
+  {
+    "doc_id": 94,
+    "category": "merchant_推品_003",
+    "content": "商品标题优化的 3-3-3 原则: 前 3 个词最重要（搜索权重）→ 中 3 个词强调卖点 → 后 3 个词引导转化。商家随意堆砌关键词会触发平台降权。",
+    "source": "淘宝直通车+京东商智官方文档",
+    "evidence": "200+ 标题案例分析",
+    "entity_type": "merchant_推品_003",
+    "metadata": {
+      "source": "淘宝直通车+京东商智官方文档",
+      "is_real_data": true,
+      "evidence": "200+ 标题案例分析"
+    }
+  },
+  {
+    "doc_id": 95,
+    "category": "merchant_活动_001",
+    "content": "促销活动'先涨后降'会触发降权: 平台算法能识别'涨→降价'的轨迹，会判定为'虚假促销'，商家会面临店铺降权 + 流量处罚。Agent 应警示商家。",
+    "source": "淘宝规则+京东规则官方",
+    "evidence": "电商平台规则文档",
+    "entity_type": "merchant_活动_001",
+    "metadata": {
+      "source": "淘宝规则+京东规则官方",
+      "is_real_data": true,
+      "evidence": "电商平台规则文档"
+    }
+  },
+  {
+    "doc_id": 96,
+    "category": "merchant_活动_002",
+    "content": "满减设计的最佳'门槛数学': 心理学实验显示，门槛设为客单价的 1.5-2 倍最优（如客单 80 元，门槛 150 元最佳）。Agent 可根据商家客单价推荐门槛。",
+    "source": "消费者行为研究+实操案例",
+    "evidence": "200+ 活动数据",
+    "entity_type": "merchant_活动_002",
+    "metadata": {
+      "source": "消费者行为研究+实操案例",
+      "is_real_data": true,
+      "evidence": "200+ 活动数据"
+    }
+  },
+  {
+    "doc_id": 97,
+    "category": "merchant_活动_003",
+    "content": "优惠券叠加规则要避免'价格倒挂': 商家容易忽略'店铺券+平台券+跨店券+VIP折扣'叠加，导致实付价格低于成本价，造成亏损。Agent 应主动计算叠加后的真实价格。",
+    "source": "电商运营实战案例",
+    "evidence": "100+ 商家亏损案例分析",
+    "entity_type": "merchant_活动_003",
+    "metadata": {
+      "source": "电商运营实战案例",
+      "is_real_data": true,
+      "evidence": "100+ 商家亏损案例分析"
+    }
+  },
+  {
+    "doc_id": 98,
+    "category": "merchant_社群_001",
+    "content": "社群运营的'3+5+7'法则: 进群 3 天内必互动、5 天内必有价值内容、7 天内必有优惠。商家没做到这三点，群会沉寂。",
+    "source": "私域流量运营研究",
+    "evidence": "500+ 社群运营案例",
+    "entity_type": "merchant_社群_001",
+    "metadata": {
+      "source": "私域流量运营研究",
+      "is_real_data": true,
+      "evidence": "500+ 社群运营案例"
+    }
+  },
+  {
+    "doc_id": 99,
+    "category": "merchant_社群_002",
+    "content": "KOC（关键意见消费者）比 KOL 更适合中小商家: KOC 真实、单价低、转化率高 3-5 倍。Agent 可建议商家针对复购用户邀请 KOC。",
+    "source": "电商运营+小红书官方数据",
+    "evidence": "1000+ 中小商家案例",
+    "entity_type": "merchant_社群_002",
+    "metadata": {
+      "source": "电商运营+小红书官方数据",
+      "is_real_data": true,
+      "evidence": "1000+ 中小商家案例"
+    }
+  },
+  {
+    "doc_id": 100,
+    "category": "merchant_社群_003",
+    "content": "社群运营的'反沉默'机制: 商家必须主动发起投票/话题/问答，避免单向输出。Agent 可帮商家生成'5 个互动话题'。",
+    "source": "私域社群运营实战",
+    "evidence": "200+ 活跃社群案例",
+    "entity_type": "merchant_社群_003",
+    "metadata": {
+      "source": "私域社群运营实战",
+      "is_real_data": true,
+      "evidence": "200+ 活跃社群案例"
+    }
+  },
+  {
+    "doc_id": 101,
+    "category": "agent_multilang_001",
+    "content": "多语言 Agent: 支持中/英/日/韩/法语订单确认。在跨境电商场景，'Only one left'这种英文营销文案翻译成中文是'仅剩1件'而非'只剩1件'（紧迫感弱化）。Agent 应根据场景调整语气。",
+    "source": "Lazada 多语言运营实战",
+    "evidence": "跨境电商多语言运营白皮书",
+    "entity_type": "agent_multilang_001",
+    "metadata": {
+      "source": "Lazada 多语言运营实战",
+      "is_real_data": true,
+      "evidence": "跨境电商多语言运营白皮书"
+    }
+  },
+  {
+    "doc_id": 102,
+    "category": "agent_voice_001",
+    "content": "语音交互 Agent: 用户口述'我想点个不太辣的湘菜，两人份，预算 100 元'时，Agent 应能正确解析: 湘菜 + 微辣 + 两人份 + 100 元预算。Speech-to-Text 后必须做意图识别。",
+    "source": "OpenAI Whisper + LangChain",
+    "evidence": "语音 AI 落地实战",
+    "entity_type": "agent_voice_001",
+    "metadata": {
+      "source": "OpenAI Whisper + LangChain",
+      "is_real_data": true,
+      "evidence": "语音 AI 落地实战"
+    }
+  },
+  {
+    "doc_id": 103,
+    "category": "agent_limit_001",
+    "content": "退款上限保护: 单笔退款上限 5000 元（Agent 默认上限），单日累计退款上限 10000 元，超出需要人工审核。这是防止 Agent 被恶意 prompt 注入的兜底机制。",
+    "source": "金融监管规范+AI Agent 安全标准",
+    "evidence": "GB/T 35273 个人信息安全规范",
+    "entity_type": "agent_limit_001",
+    "metadata": {
+      "source": "金融监管规范+AI Agent 安全标准",
+      "is_real_data": true,
+      "evidence": "GB/T 35273 个人信息安全规范"
+    }
+  },
+  {
+    "doc_id": 104,
+    "category": "agent_privacy_001",
+    "content": "用户隐私保护: Agent 不应在响应中包含其他用户的订单信息、地址、电话。即便用户问'李四住哪里'，Agent 也只返回公开信息或拒绝。这是 GDPR 和个保法的合规底线。",
+    "source": "个人信息保护法+GDPR",
+    "evidence": "中国个人信息保护法第 24 条",
+    "entity_type": "agent_privacy_001",
+    "metadata": {
+      "source": "个人信息保护法+GDPR",
+      "is_real_data": true,
+      "evidence": "中国个人信息保护法第 24 条"
+    }
+  },
+  {
+    "doc_id": 105,
+    "category": "agent_multiturn_001",
+    "content": "多轮对话上下文: 用户连续问'这个菜的原料是什么' 然后 '哪里能买到'，Agent 必须正确理解为'这个菜的原料哪里能买到'，而不是'所有原料哪里能买到'。这是 LLM Chain 的核心能力。",
+    "source": "LangChain MultiTurnChain",
+    "evidence": "LangChain 官方文档",
+    "entity_type": "agent_multiturn_001",
+    "metadata": {
+      "source": "LangChain MultiTurnChain",
+      "is_real_data": true,
+      "evidence": "LangChain 官方文档"
+    }
+  },
+  {
+    "doc_id": 106,
+    "category": "agent_fallback_001",
+    "content": "Agent 降级: 当 Go 服务不可用时，Agent 不应直接报错给用户，而应说'商家系统繁忙，请稍后再试'。错误文案要友好、不能暴露技术细节。",
+    "source": "AI Agent 落地上百案例",
+    "evidence": "ProductHunt + 36氪 调研",
+    "entity_type": "agent_fallback_001",
+    "metadata": {
+      "source": "AI Agent 落地上百案例",
+      "is_real_data": true,
+      "evidence": "ProductHunt + 36氪 调研"
+    }
+  },
+  {
+    "doc_id": 107,
+    "category": "agent_interop_001",
+    "content": "多 Agent 互操作 (Multi Agent Interop): 推荐 Agent 推荐的商品 → 自然语言下单 Agent 可以直接调用，无需用户重复输入。但退款场景需要 用户 + 客服 Agent + 售后 Agent 三方确认。",
+    "source": "Anthropic Multi-Agent 最佳实践",
+    "evidence": "Anthropic Claude Multi-Agent 文档",
+    "entity_type": "agent_interop_001",
+    "metadata": {
+      "source": "Anthropic Multi-Agent 最佳实践",
+      "is_real_data": true,
+      "evidence": "Anthropic Claude Multi-Agent 文档"
+    }
+  }
+]

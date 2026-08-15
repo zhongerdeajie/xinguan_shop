@@ -1,0 +1,25 @@
+# Python AI test image.
+#
+# Build:
+#   docker build -f python-ai/Dockerfile.test -t school-system3-python-test python-ai
+#
+# Runs pytest against pure-function tests (no network, no embedding/LLM).
+# Integration tests that require MySQL/Redis/NestJS live in the same suite
+# but are excluded here via -m "not integration".
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt pytest
+
+COPY . .
+
+CMD ["sh", "-c", "python -m pytest -m 'not integration'"]

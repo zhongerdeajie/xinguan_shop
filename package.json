@@ -1,0 +1,19 @@
+{
+  "name": "school-system",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "docker-compose up -d && concurrently \"npm:dev:*\"",
+    "dev:go": "cd go-service && go run cmd/main.go",
+    "dev:python": "cd python-ai && uvicorn app.main:app --reload --port 5000",
+    "dev:nest": "cd nestjs-api && npm run dev",
+    "dev:next": "cd next-web && npm run dev",
+    "dev:vue": "cd vue-admin && npm run dev",
+    "build": "docker-compose build",
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

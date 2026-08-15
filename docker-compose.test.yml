@@ -1,0 +1,62 @@
+# docker-compose.test.yml
+#
+# Reuses the long-running services from docker-compose.yml (mysql, redis,
+# nestjs-api, python-ai, go-service) and adds four one-shot test containers.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up --abort-on-container-exit \
+#     --exit-code-from go-test
+#
+# Exit code 0 = all tests green. Any container exit != 0 fails the run.
+
+services:
+  go-test:
+    build:
+      context: ./go-service
+      dockerfile: Dockerfile.test
+    image: school-system3-go-test:latest
+    environment:
+      - TEST_REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    networks:
+      - school-system3_default
+    restart: "no"
+
+  python-test:
+    build:
+      context: ./python-ai
+      dockerfile: Dockerfile.test
+    image: school-system3-python-test:latest
+    networks:
+      - school-system3_default
+    restart: "no"
+
+  nestjs-test:
+    build:
+      context: ./nestjs-api
+      dockerfile: Dockerfile.test
+    image: school-system3-nestjs-test:latest
+    environment:
+      - NEST_BASE=http://nestjs-api:3000
+      - AI_BASE=http://python-ai:5000
+    depends_on:
+      - nestjs-api
+      - python-ai
+    networks:
+      - school-system3_default
+    restart: "no"
+
+  next-test:
+    build:
+      context: ./next-web
+      dockerfile: Dockerfile.test
+    image: school-system3-next-test:latest
+    networks:
+      - school-system3_default
+    restart: "no"
+
+networks:
+  school-system3_default:
+    name: school-system3_default
+    external: true

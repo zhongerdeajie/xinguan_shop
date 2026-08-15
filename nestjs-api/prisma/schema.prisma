@@ -1,0 +1,309 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== 员工表 ====================
+model Employee {
+  id         Int       @id @default(autoincrement())
+  name       String    @db.VarChar(32)
+  username   String    @unique @db.VarChar(32)
+  password   String    @db.VarChar(64)
+  phone      String?   @db.VarChar(11)
+  sex        String?   @db.VarChar(2)
+  idNumber   String?   @db.VarChar(18) @map("id_number")
+  status     Int       @default(1)
+  createTime DateTime? @map("create_time") @db.DateTime
+  updateTime DateTime? @map("update_time") @db.DateTime
+  createUser Int?      @map("create_user")
+  updateUser Int?      @map("update_user")
+
+  @@map("employee")
+}
+
+// ==================== 分类表 ====================
+model Category {
+  id         Int       @id @default(autoincrement())
+  type       Int? // 1:菜品分类 2:套餐分类
+  name       String    @db.VarChar(32)
+  sort       Int       @default(0)
+  status     Int       @default(1)
+  createTime DateTime? @map("create_time") @db.DateTime
+  updateTime DateTime? @map("update_time") @db.DateTime
+  createUser Int?      @map("create_user")
+  updateUser Int?      @map("update_user")
+
+  dishes    Dish[]
+  setmeals  Setmeal[]
+
+  @@map("category")
+}
+
+// ==================== 菜品表 ====================
+model Dish {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(32)
+  categoryId  Int       @map("category_id")
+  price       Decimal   @db.Decimal(10, 2)
+  image       String?   @db.VarChar(255)
+  description String?   @db.VarChar(255)
+  status      Int       @default(1)
+  rating      Float     @default(4.5)
+  sales       Int       @default(0)
+  isSponsored Boolean   @default(false) @map("is_sponsored")
+  createTime  DateTime? @map("create_time") @db.DateTime
+  updateTime  DateTime? @map("update_time") @db.DateTime
+  createUser  Int?      @map("create_user")
+  updateUser  Int?      @map("update_user")
+
+  category      Category       @relation(fields: [categoryId], references: [id])
+  flavors      DishFlavor[]
+  setmealDishes SetmealDish[]
+  orderDetails OrderDetail[]
+  cartItems    ShoppingCart[]
+  browseHistories BrowseHistory[]
+
+  @@index([categoryId])
+  @@map("dish")
+}
+
+// ==================== 菜品口味表 ====================
+model DishFlavor {
+  id     Int    @id @default(autoincrement())
+  dishId Int    @map("dish_id")
+  name   String @db.VarChar(32)
+  value  String @db.VarChar(255) // JSON数组
+
+  dish Dish @relation(fields: [dishId], references: [id])
+
+  @@map("dish_flavor")
+}
+
+// ==================== 套餐表 ====================
+model Setmeal {
+  id          Int       @id @default(autoincrement())
+  categoryId  Int       @map("category_id")
+  name        String    @db.VarChar(32)
+  price       Decimal   @db.Decimal(10, 2)
+  status      Int       @default(1)
+  description String?   @db.VarChar(255)
+  image       String?   @db.VarChar(255)
+  sort        Int       @default(0)
+  createTime  DateTime? @map("create_time") @db.DateTime
+  updateTime  DateTime? @map("update_time") @db.DateTime
+  createUser  Int?      @map("create_user")
+  updateUser  Int?      @map("update_user")
+
+  category     Category       @relation(fields: [categoryId], references: [id])
+  setmealDishes SetmealDish[]
+  orderDetails  OrderDetail[]
+  cartItems     ShoppingCart[]
+
+  @@map("setmeal")
+}
+
+// ==================== 套餐菜品关系表 ====================
+model SetmealDish {
+  id        Int      @id @default(autoincrement())
+  setmealId Int?     @map("setmeal_id")
+  dishId    Int?     @map("dish_id")
+  name      String?  @db.VarChar(32)
+  price     Decimal? @db.Decimal(10, 2)
+  copies    Int?
+  sort      Int      @default(0)
+
+  setmeal Setmeal? @relation(fields: [setmealId], references: [id])
+  dish    Dish?    @relation(fields: [dishId], references: [id])
+
+  @@map("setmeal_dish")
+}
+
+// ==================== 用户表 ====================
+model User {
+  id         Int       @id @default(autoincrement())
+  openid     String?   @unique @db.VarChar(45)
+  name       String?   @db.VarChar(32)
+  phone      String?   @db.VarChar(11)
+  password   String?   @db.VarChar(128)
+  sex        String?   @db.VarChar(2)
+  idNumber   String?   @db.VarChar(18) @map("id_number")
+  avatar     String?   @db.VarChar(500)
+  createTime DateTime? @map("create_time") @db.DateTime
+
+  addresses   AddressBook[]
+  orders      Orders[]
+  cartItems   ShoppingCart[]
+  chatMessages ChatMessage[]
+  browseHistories BrowseHistory[]
+  userCoupons  UserCoupon[]
+
+  @@map("user")
+}
+
+// ==================== 顾客聊天记录表 ====================
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  role       String   @db.VarChar(16)
+  content    String   @db.VarChar(2000)
+  intent     String?  @db.VarChar(64)
+  createTime DateTime @map("create_time") @db.DateTime
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("chat_message")
+}
+
+// ==================== 顾客浏览记录表 ====================
+model BrowseHistory {
+  id       Int      @id @default(autoincrement())
+  userId   Int      @map("user_id")
+  dishId   Int      @map("dish_id")
+  viewTime DateTime @map("view_time") @db.DateTime
+
+  user User @relation(fields: [userId], references: [id])
+  dish Dish @relation(fields: [dishId], references: [id])
+
+  @@index([userId])
+  @@map("browse_history")
+}
+
+// ==================== 优惠券表（营销中心） ====================
+model Coupon {
+  id         Int       @id @default(autoincrement())
+  title      String    @db.VarChar(100)
+  amount     Decimal   @db.Decimal(10, 2)
+  threshold  Decimal   @db.Decimal(10, 2)
+  status     Int       @default(1)
+  createTime DateTime? @map("create_time") @db.DateTime
+  updateTime DateTime? @map("update_time") @db.DateTime
+
+  userCoupons UserCoupon[]
+  @@map("coupon")
+}
+
+// ==================== 地址簿表 ====================
+// ==================== 用户优惠券（领用关系） ====================
+model UserCoupon {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  couponId    Int       @map("coupon_id")
+  status      Int       @default(0) // 0 未使用 1 已使用
+  claimedTime DateTime  @map("claimed_time") @db.DateTime
+  usedTime    DateTime? @map("used_time") @db.DateTime
+
+  user   User   @relation(fields: [userId], references: [id])
+  coupon Coupon @relation(fields: [couponId], references: [id])
+
+  @@index([userId])
+  @@map("user_coupon")
+}
+
+model AddressBook {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  consignee     String?   @db.VarChar(50)
+  sex           String?   @db.VarChar(2)
+  phone         String    @db.VarChar(11)
+  provinceCode  String?   @db.VarChar(12) @map("province_code")
+  provinceName  String?   @db.VarChar(32) @map("province_name")
+  cityCode      String?   @db.VarChar(12) @map("city_code")
+  cityName      String?   @db.VarChar(32) @map("city_name")
+  districtCode  String?   @db.VarChar(12) @map("district_code")
+  districtName  String?   @db.VarChar(32) @map("district_name")
+  detail        String?   @db.VarChar(200)
+  label         String?   @db.VarChar(100)
+  isDefault     Int       @default(0) @map("is_default")
+  createTime    DateTime? @map("create_time") @db.DateTime
+  updateTime    DateTime? @map("update_time") @db.DateTime
+  createUser    Int?      @map("create_user")
+  updateUser    Int?      @map("update_user")
+
+  user   User      @relation(fields: [userId], references: [id])
+  orders Orders[]
+
+  @@index([userId])
+  @@map("address_book")
+}
+
+// ==================== 购物车表 ====================
+model ShoppingCart {
+  id         Int      @id @default(autoincrement())
+  name       String?  @db.VarChar(32)
+  image      String?  @db.VarChar(255)
+  userId     Int      @map("user_id")
+  dishId     Int?     @map("dish_id")
+  setmealId  Int?     @map("setmeal_id")
+  dishFlavor String?  @db.VarChar(50)
+  number     Int      @default(1)
+  amount     Decimal  @db.Decimal(10, 2)
+  createTime DateTime? @map("create_time") @db.DateTime
+
+  user    User     @relation(fields: [userId], references: [id])
+  dish    Dish?    @relation(fields: [dishId], references: [id])
+  setmeal Setmeal? @relation(fields: [setmealId], references: [id])
+
+  @@index([userId])
+  @@map("shopping_cart")
+}
+
+// ==================== 订单表 ====================
+model Orders {
+  id                    Int       @id @default(autoincrement())
+  number                String?   @db.VarChar(50)
+  status                Int       @default(1) // 1:待付款 2:待接单 3:已接单 4:派送中 5:已完成 6:已取消
+  userId                Int       @map("user_id")
+  addressBookId         Int       @map("address_book_id")
+  orderTime             DateTime  @map("order_time")
+  checkoutTime          DateTime? @map("checkout_time")
+  payMethod             Int       @default(1) @map("pay_method")
+  payStatus             Int       @default(0) @map("pay_status")
+  amount                Decimal   @db.Decimal(10, 2)
+  discountAmount        Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  remark                String?   @db.VarChar(100)
+  phone                 String?   @db.VarChar(20)
+  address               String?   @db.VarChar(255)
+  userName              String?   @db.VarChar(32) @map("user_name")
+  consignee             String?   @db.VarChar(32)
+  cancelReason          String?   @db.VarChar(255) @map("cancel_reason")
+  rejectionReason       String?   @db.VarChar(255) @map("rejection_reason")
+  cancelTime            DateTime? @map("cancel_time")
+  estimatedDeliveryTime DateTime? @map("estimated_delivery_time")
+  deliveryStatus        Int       @default(1) @map("delivery_status")
+  packAmount            Int?      @map("pack_amount")
+  tablewareNumber       Int?      @map("tableware_number")
+  tablewareStatus       Int       @default(1) @map("tableware_status")
+
+  user         User           @relation(fields: [userId], references: [id])
+  addressBook  AddressBook    @relation(fields: [addressBookId], references: [id])
+  orderDetails OrderDetail[]
+
+  @@index([userId])
+  @@index([number])
+  @@map("orders")
+}
+
+// ==================== 订单明细表 ====================
+model OrderDetail {
+  id         Int      @id @default(autoincrement())
+  name       String?  @db.VarChar(32)
+  image      String?  @db.VarChar(255)
+  orderId    Int      @map("order_id")
+  dishId     Int?     @map("dish_id")
+  setmealId  Int?     @map("setmeal_id")
+  dishFlavor String?  @db.VarChar(50)
+  number     Int      @default(1)
+  amount     Decimal  @db.Decimal(10, 2)
+
+  order   Orders  @relation(fields: [orderId], references: [id])
+  dish    Dish?   @relation(fields: [dishId], references: [id])
+  setmeal Setmeal? @relation(fields: [setmealId], references: [id])
+
+  @@index([orderId])
+  @@map("order_detail")
+}

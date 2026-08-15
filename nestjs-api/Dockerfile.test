@@ -1,0 +1,18 @@
+# NestJS test image.
+#
+# Build:
+#   docker build -f nestjs-api/Dockerfile.test -t school-system3-nestjs-test .
+#
+# This image only runs Jest tests; it does NOT start the NestJS server because
+# docker-compose.test.yml points the test runner at the live nestjs-api service
+# already published by docker-compose.yml.
+FROM node:20-bookworm AS test
+WORKDIR /app
+
+RUN npm config set registry https://registry.npmmirror.com/
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npx prisma generate
+
+CMD ["sh", "-c", "npx prisma generate && npx tsc --noEmit && npm run test:e2e"]

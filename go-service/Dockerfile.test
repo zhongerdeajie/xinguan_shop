@@ -1,0 +1,23 @@
+# Go service test image.
+#
+# Build:
+#   docker build -f go-service/Dockerfile.test -t school-system3-go-test .
+#
+# Run inside docker-compose.test.yml: the test container waits for mysql/redis,
+# then runs `go test ./...` against real services and exits.
+FROM golang:1.23-alpine AS test
+WORKDIR /src
+
+ENV CGO_ENABLED=1 \
+    GOFLAGS=-mod=mod \
+    GOPROXY=https://goproxy.cn,direct
+
+# Alpine 需要的 CGO 工具链，go-sqlite3 走 cgo
+RUN apk add --no-cache gcc musl-dev
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+CMD ["sh", "-c", "go test -count=1 -v ./..."]
