@@ -47,13 +47,14 @@ export default function CustomerLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
+        <div className="flex items-center justify-between mb-6">
           <Link href="/" className="inline-flex items-center gap-2">
             <span className="text-3xl">🍜</span>
             <span className="serif text-xl font-semibold" style={{ color: 'var(--accent)' }}>星选 AI 购物管家</span>
           </Link>
-          <p className="mt-2" style={{ color: 'var(--muted)' }}>登录后可保存浏览记录、聊天记录和订单</p>
+          <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>← 返回菜单</Link>
         </div>
+        <p className="text-center mb-6 text-sm" style={{ color: 'var(--muted)' }}>登录后可保存浏览记录、聊天记录和订单</p>
 
         <div className="xcard p-6">
           <div className="flex rounded-full p-1 mb-6" style={{ background: 'var(--bg-deep)' }}>
@@ -92,13 +93,14 @@ export default function CustomerLoginPage() {
               <input
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="密码（至少 6 位）"
+                placeholder="密码"
                 type="password"
                 required
                 minLength={6}
                 className="w-full px-4 py-3 border rounded-lg focus:outline-none"
                 style={{ borderColor: 'var(--border)' }}
             />
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>至少 6 位</p>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               disabled={loading}
@@ -106,13 +108,15 @@ export default function CustomerLoginPage() {
             >
               {loading ? '请稍候...' : mode === 'login' ? '登 录' : '注册并登录'}
             </button>
+            {mode === 'login' && (
+              <div className="flex justify-between text-xs mt-2">
+                <Link href="/login" className="text-sm" style={{ color: 'var(--muted)' }}>忘记密码?</Link>
+              </div>
+            )}
           </form>
-        </div>
-
-        <div className="text-center mt-4">
-          <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>
-            ← 返回菜单
-          </Link>
+          <div className="text-center mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>暂不登录，继续浏览 →</Link>
+          </div>
         </div>
       </div>
     </div>

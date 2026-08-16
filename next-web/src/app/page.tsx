@@ -60,6 +60,8 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [toast, setToast] = useState('');
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const [budget, setBudget] = useState('');
   const [bargainRes, setBargainRes] = useState<{
     total: number;
@@ -259,57 +261,61 @@ export default function HomePage() {
     localStorage.setItem('lang', next);
   }
 
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 500);
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      {/* 磨砂导航 */}
+      {/* 磨砂导航 - sticky */}
       <header className="frosted sticky top-0 z-40">
-        <div className="shell max-w-6xl mx-auto px-4 md:px-8 min-h-16 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="shell max-w-6xl mx-auto px-4 md:px-8 min-h-14 py-2.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🍜</span>
-            <span className="serif text-xl font-semibold" style={{ color: 'var(--accent)' }}>
+            <span className="serif text-base md:text-xl font-semibold" style={{ color: 'var(--accent)' }}>
               {i18n.brand}
             </span>
           </Link>
-          <div className="flex items-center gap-1.5 md:gap-2">
+          {/* 桌面端导航 */}
+          <div className="hidden md:flex items-center gap-2">
             {isLoggedIn ? (
-              <Link href="/account" className="pill pill-ghost !h-9 !px-4 !text-[13px]">
-                我的
-              </Link>
+              <Link href="/account" className="pill pill-ghost !h-9 !px-4 !text-[13px]">我的</Link>
             ) : (
-              <Link href="/account/login" className="pill pill-ghost !h-9 !px-4 !text-[13px]">
-                登录/注册
-              </Link>
+              <Link href="/account/login" className="pill pill-ghost !h-9 !px-4 !text-[13px]">登录/注册</Link>
             )}
-            <Link href="/cart" className="pill pill-ghost !h-9 !px-4 !text-[13px]">
-              🛒 购物车
-            </Link>
-            <button
-              onClick={switchLang}
-              className="pill pill-soft !h-9 !px-4 !text-[13px]"
-            >
-              {lang === 'zh' ? 'EN' : '中文'}
-            </button>
+            <Link href="/cart" className="pill pill-ghost !h-9 !px-4 !text-[13px]">🛒 购物车</Link>
+          </div>
+          {/* 手机端汉堡菜单 */}
+          <div className="md:hidden">
+            <button onClick={() => setMenuOpen(!menuOpen)} className="pill pill-ghost !h-9 !w-9 !px-0 flex items-center justify-center text-lg">☰</button>
+            {menuOpen && (
+              <div className="absolute right-4 mt-2 bg-white shadow-lg rounded-lg p-3 space-y-2 min-w-[160px]" style={{ background: 'var(--bg)' }}>
+                {isLoggedIn ? (
+                  <Link href="/account" onClick={() => setMenuOpen(false)} className="block pill pill-ghost !h-9 !px-4 !text-[13px] !w-full text-center">我的</Link>
+                ) : (
+                  <Link href="/account/login" onClick={() => setMenuOpen(false)} className="block pill pill-ghost !h-9 !px-4 !text-[13px] !w-full text-center">登录/注册</Link>
+                )}
+                <Link href="/cart" onClick={() => setMenuOpen(false)} className="block pill pill-ghost !h-9 !px-4 !text-[13px] !w-full text-center">🛒 购物车</Link>
+                <Link href="/assistant" onClick={() => setMenuOpen(false)} className="block pill pill-ghost !h-9 !px-4 !text-[13px] !w-full text-center">🤖 AI点餐</Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden px-4 md:px-8 pt-14 pb-10 text-center">
-        <div className="eyebrow mb-4">{i18n.eyebrow}</div>
-        <h1 className="cjk-display text-4xl md:text-6xl font-semibold mb-5" style={{ color: 'var(--fg)' }}>
+      {/* Hero - 响应式字号，减少首屏占用 */}
+      <section className="relative overflow-hidden px-4 md:px-8 pt-6 md:pt-10 pb-6 md:pb-8 text-center">
+        <h1 className="cjk-display text-2xl md:text-4xl font-semibold mb-3" style={{ color: 'var(--fg)' }}>
           {i18n.tagline}
         </h1>
-        <p className="text-base md:text-lg mb-8" style={{ color: 'var(--muted)' }}>
+        <p className="text-sm md:text-base mb-5" style={{ color: 'var(--muted)' }}>
           {i18n.sub}
         </p>
-        <Link
-          href="/assistant"
-          className="pill pill-accent px-8 !h-14 !text-base shadow-lg"
-        >
-          {i18n.cta}
-        </Link>
-        <div className="flex justify-center gap-6 mt-8 text-sm" style={{ color: 'var(--muted)' }}>
-          <span>⭐ 真实评分数据</span>
+        <Link href="/assistant" className="pill pill-accent px-6 !h-12 !text-sm shadow-lg">{i18n.cta}</Link>
+        <div className="flex justify-center gap-4 md:gap-6 mt-5 text-xs md:text-sm" style={{ color: 'var(--muted)' }}>
+          <span>⭐ 真实评分</span>
           <span>🛒 下单即达</span>
           <span>🎟️ 领券立减</span>
         </div>
@@ -318,17 +324,18 @@ export default function HomePage() {
       {/* 预算凑单 */}
       <section className="px-4 md:px-8 pb-6">
         <div className="xcard p-6 max-w-2xl mx-auto">
-          <h2 className="font-semibold mb-3">💰 {i18n.bargainTitle}</h2>
-          <div className="flex gap-2">
+          <h2 className="font-semibold mb-2">💰 {i18n.bargainTitle}</h2>
+          <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>输入预算，AI 帮您凑单</p>
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
               placeholder={i18n.bargainPlaceholder}
               type="number"
-              className="flex-1 px-4 py-2.5 rounded-full border"
+              className="w-full sm:flex-1 px-4 py-2.5 rounded-full border"
               style={{ borderColor: 'var(--border)' }}
             />
-            <button onClick={bargain} disabled={bargainLoading} className="pill pill-accent">
+            <button onClick={bargain} disabled={bargainLoading} className="pill pill-accent w-full sm:w-auto whitespace-nowrap">
               {bargainLoading ? '...' : i18n.bargainBtn}
             </button>
           </div>
@@ -401,33 +408,23 @@ export default function HomePage() {
       {/* 菜单 */}
       <section className="px-4 md:px-8 py-8">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <div className="eyebrow mb-2">Menu</div>
-            <h2 className="cjk-display text-3xl font-semibold">{i18n.menu}</h2>
-            <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-              {i18n.menuSub}
-            </p>
+          <div className="text-center mb-5">
+            <h2 className="cjk-display text-xl md:text-2xl font-semibold">{i18n.menu}</h2>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{i18n.menuSub}</p>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-2 mb-8">
+          {/* 分类按钮 - 横向滚动，不溢出 */}
+          <div className="flex overflow-x-auto gap-2 mb-6 pb-2 -mx-4 px-4" style={{ scrollbarWidth: 'thin' }}>
             <button
               onClick={() => setActiveCategory('all')}
-              className={`pill !h-9 !px-5 !text-[13px] ${
-                activeCategory === 'all' ? 'pill-accent' : 'pill-soft'
-              }`}
-            >
-              全部
-            </button>
+              className={`pill !h-9 !px-5 !text-[13px] flex-shrink-0 whitespace-nowrap ${activeCategory === 'all' ? 'pill-accent' : 'pill-soft'}`}
+            >全部</button>
             {categories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveCategory(c.id)}
-                className={`pill !h-9 !px-5 !text-[13px] ${
-                  activeCategory === c.id ? 'pill-accent' : 'pill-soft'
-                }`}
-              >
-                {c.name}
-              </button>
+                className={`pill !h-9 !px-5 !text-[13px] flex-shrink-0 whitespace-nowrap ${activeCategory === c.id ? 'pill-accent' : 'pill-soft'}`}
+              >{c.name}</button>
             ))}
           </div>
 
@@ -440,7 +437,7 @@ export default function HomePage() {
               {i18n.empty}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((dish, idx) => (
                 <div
                   key={dish.id}
@@ -449,47 +446,27 @@ export default function HomePage() {
                   style={{ animationDelay: `${Math.min(idx * 60, 400)}ms` }}
                 >
                   <div
-                    className="grid place-items-center text-5xl mx-3 mt-3 rounded-lg"
-                    style={{
-                      aspectRatio: '4 / 3',
-                      background: 'var(--bg-deep)',
-                      borderRadius: 10,
-                    }}
+                    className="grid place-items-center text-4xl rounded-t-lg"
+                    style={{ aspectRatio: '4 / 3', background: 'var(--bg-deep)' }}
                   >
-                    🍽️
+                    {dish.image ? <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" loading="lazy" /> : '🍽️'}
                   </div>
-                  <div className="p-5">
-                    <div className="flex items-start justify-between">
-                      <h3 className="serif text-xl font-semibold">{dish.name}</h3>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                        月销 {dish.sales ?? 0}
-                      </span>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="serif text-lg font-semibold truncate">{dish.name}</h3>
+                      {dish.sales ? <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted)' }}>月销 {dish.sales}</span> : null}
                     </div>
-                    <p
-                      className="text-sm mt-1 mb-3 min-h-[20px] truncate"
-                      style={{ color: 'var(--muted)' }}
-                    >
-                      {dish.description || '暂无描述'}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="mono text-xl font-semibold" style={{ color: 'var(--accent)' }}>
-                        ¥{Number(dish.price).toFixed(2)}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm" style={{ color: 'var(--warn)' }}>
-                          ⭐ {dish.rating ?? '4.5'}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addToCart(dish);
-                          }}
-                          className="pill pill-accent !h-9 !px-4 !text-[13px]"
-                        >
-                          加入购物车
-                        </button>
-                      </div>
+                    {dish.description ? (
+                      <p className="text-sm mt-1 mb-3 truncate" style={{ color: 'var(--muted)' }}>{dish.description}</p>
+                    ) : null}
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="mono text-lg font-semibold" style={{ color: 'var(--accent)' }}>¥{Number(dish.price).toFixed(2)}</span>
+                      <span className="text-sm" style={{ color: 'var(--warn)' }}>⭐ {dish.rating ?? '4.5'}</span>
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); addToCart(dish); }}
+                      className="pill pill-accent !h-9 !w-full !text-[13px] mt-3"
+                    >加入购物车</button>
                   </div>
                 </div>
               ))}
@@ -506,7 +483,7 @@ export default function HomePage() {
         >
           <div className="xcard max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
-              <span className="text-5xl">🍽️</span>
+              {selectedDish.image ? <img src={selectedDish.image} alt={selectedDish.name} className="w-16 h-16 rounded-lg object-cover" /> : <span className="text-5xl">🍽️</span>}
               <button onClick={() => setSelectedDish(null)} className="text-lg" style={{ color: 'var(--muted)' }}>
                 ✕
               </button>
@@ -543,6 +520,33 @@ export default function HomePage() {
       <footer className="px-4 py-10 text-center text-sm" style={{ color: 'var(--muted)' }}>
         星选 AI 购物管家 · 真实数据驱动的电商 Agent 演示项目
       </footer>
+
+      {/* 返回顶部按钮 */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-20 right-4 z-50 w-11 h-11 rounded-full shadow-lg flex items-center justify-center text-lg"
+          style={{ background: 'var(--accent)', color: '#fff' }}
+        >
+          ↑
+        </button>
+      )}
+
+      {/* 底部 TabBar（手机端） */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around h-14 border-t" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
+        <Link href="/" className="flex flex-col items-center justify-center text-xs" style={{ color: 'var(--accent)' }}>
+          <span className="text-lg">🏠</span><span>首页</span>
+        </Link>
+        <Link href="/assistant" className="flex flex-col items-center justify-center text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="text-lg">🤖</span><span>AI</span>
+        </Link>
+        <Link href="/cart" className="flex flex-col items-center justify-center text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="text-lg">🛒</span><span>购物车</span>
+        </Link>
+        <Link href={isLoggedIn ? '/account' : '/account/login'} className="flex flex-col items-center justify-center text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="text-lg">👤</span><span>{isLoggedIn ? '我的' : '登录'}</span>
+        </Link>
+      </nav>
 
       {toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm shadow-lg z-50 text-white"

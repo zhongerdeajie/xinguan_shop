@@ -161,7 +161,8 @@ class PriceCompareAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
         """比价主流程"""
 
         # Step 1: 从消息提取商品名称
@@ -169,18 +170,17 @@ class PriceCompareAgent(BaseAgent):
         if not product_name:
             return "请告诉我您想比价的商品名称，例如可乐、iPhone 15。"
 
-        # Step 2: 搜索商品（多个商家）
-        from app.agents.base import call_go_service
-        search_resp = await call_go_service(
-            f"/api/v1/dishes?name={product_name}&limit=10",
-            user_id=user_id
+        # Step 2: 搜索商品（P0-3：改用 NestJS）
+        from app.agents.base import call_nestjs_api
+        search_resp = await call_nestjs_api(
+            f"/v1/dishes?keyword={product_name}&limit=10"
         )
         self.record_tool_usage("search_product_by_name")
 
         if search_resp.get("status") != 200:
             return f"查询 {product_name} 时出错了，请稍后再试。"
 
-        products = search_resp.get("data", {}).get("data", [])
+        products = search_resp.get("data", {}).get("data") or search_resp.get("data", {}).get("list") or []
         if not products:
             return (
                 f"未找到 {product_name} 相关商品。\n\n"
@@ -196,22 +196,25 @@ class PriceCompareAgent(BaseAgent):
         best_score = -1
 
         for product in products[:5]:
-            price = product.get("price", 0)
+            price = float(product.get("price", 0) or 0)
             name = product.get("name", "未知商品")
 
-            # 模拟历史价格（实际从 Redis 取）
-            mock_history = self._get_mock_history(product.get("id", 0), price)
-
-            analysis = analyze_price_trend(mock_history, price)
+            # P1-2：从 Redis ZSET 读真实价格历史（不再造假）
+            real_history = self._get_real_history(product.get("id", 0), price)
 
             result += f"**{name}** - {price} 元\n"
-            result += f"  - 历史最低：{analysis['min']} 元\n"
-            result += f"  - 历史均价：{analysis['avg']} 元\n"
-            result += f"  - 趋势：{self._trend_emoji(analysis['trend'])} {analysis['trend']}\n"
-            result += f"  - {analysis['suggestion']}\n\n"
+            if real_history:
+                analysis = analyze_price_trend(real_history, price)
+                result += f"  - 历史最低：{analysis['min']} 元\n"
+                result += f"  - 历史均价：{analysis['avg']} 元\n"
+                result += f"  - 趋势：{self._trend_emoji(analysis['trend'])} {analysis['trend']}\n"
+                result += f"  - {analysis['suggestion']}\n\n"
+                score = 100 - price + (10 if analysis['is_real_discount'] else 0)
+            else:
+                result += "  - 暂无历史价格数据（价格变动后会自动记录）\n\n"
+                score = 100 - price
 
             # 综合评分：价格越低、趋势越向下，分数越高
-            score = 100 - price + (10 if analysis['is_real_discount'] else 0)
             if score > best_score:
                 best_score = score
                 best_product = product
@@ -231,26 +234,26 @@ class PriceCompareAgent(BaseAgent):
         clean = clean.strip()
         return clean if clean else None
 
-    def _get_mock_history(self, product_id: int, current_price: float) -> List[Dict[str, Any]]:
-        """模拟历史价格（实际从 Redis 取）"""
-        import random
-        import time
+    def _get_real_history(self, product_id: int, current_price: float) -> List[Dict[str, Any]]:
+        """P1-2：从 Redis ZSET 读真实价格历史（price:history:{product_id}）
 
-        history = []
-        base_price = current_price * 1.2  # 历史价格略高于现在
-        for i in range(30):
-            timestamp = int(time.time() * 1000) - (30 - i) * 86400000
-            # 价格波动 ±10%
-            price = base_price * (1 + random.uniform(-0.1, 0.1))
-            history.append({"timestamp": timestamp, "price": round(price, 2)})
-
-        # 最后一天设为当前价
-        history.append({
-            "timestamp": int(time.time() * 1000),
-            "price": current_price
-        })
-
-        return history
+        没有历史数据时返回空列表（不造假）。
+        数据由 NestJS 侧在菜品价格变动时写入（ZADD 时间戳为 score，价格为 member）。
+        """
+        try:
+            from app.agents.base import get_redis
+            key = f"price:history:{product_id}"
+            # ZRANGE 取全部历史（member=价格, score=时间戳）
+            raw = get_redis().zrange(key, 0, -1, withscores=True)
+            history = [
+                {"timestamp": int(ts), "price": float(price)}
+                for price, ts in raw
+            ]
+            # 按时间正序排列
+            history.sort(key=lambda x: x["timestamp"])
+            return history
+        except Exception:
+            return []
 
     def _trend_emoji(self, trend: str) -> str:
         emoji_map = {

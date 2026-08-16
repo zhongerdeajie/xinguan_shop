@@ -12,7 +12,7 @@
 4. 转化率实时统计
 5. 透明规则（告诉商家"为什么推给这个用户"）
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from app.agents.base import BaseAgent, call_go_service
 
 
@@ -46,7 +46,8 @@ class MarketingAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
         """营销主流程"""
 
         # Step 1: 解析营销需求

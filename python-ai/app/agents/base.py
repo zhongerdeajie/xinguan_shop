@@ -13,6 +13,24 @@ import time
 import asyncio
 from abc import ABC, abstractmethod
 
+import redis
+
+
+# ==================== Redis 多轮对话记忆（P0-1）====================
+
+_redis_client = None
+
+
+def get_redis():
+    """获取 Redis 连接（单例，用于多轮对话记忆）"""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.from_url(
+            os.getenv("REDIS_URL", "redis://redis:6379/0"),
+            decode_responses=True,
+        )
+    return _redis_client
+
 
 # ==================== 工具白名单配置 ====================
 
@@ -77,16 +95,21 @@ class BaseAgent(ABC):
     async def run(self, message: str, user_id: str = "anonymous",
                   session_id: str = "default",
                   entities: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """执行 Agent 主流程
+        """执行 Agent 主流程（P0-1 改造：加载历史 → 执行 → 保存历史）
 
         子类可重写此方法实现自定义推理流程。
         """
         entities = entities or {}
         self.tools_used = []
 
+        # P0-1：从 Redis 加载多轮对话历史
+        history = self._load_history(session_id)
+
         try:
-            # 调用子类的具体实现
-            result = await self._execute(message, user_id, session_id, entities)
+            # 调用子类的具体实现（传入 history）
+            result = await self._execute(message, user_id, session_id, entities, history=history)
+            # P0-1：保存本轮对话到 Redis
+            self._save_history(session_id, message, result)
             return {
                 "response": result,
                 "tools_used": self.tools_used,
@@ -103,9 +126,39 @@ class BaseAgent(ABC):
 
     @abstractmethod
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
-        """子类的具体执行逻辑"""
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
+        """子类的具体执行逻辑（P0-1：新增 history 参数）"""
         pass
+
+    # ---------- P0-1：多轮对话记忆 ----------
+    def _load_history(self, session_id: str, max_turns: int = 10) -> List[Dict[str, str]]:
+        """从 Redis 加载最近 N 轮对话历史
+
+        返回格式: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]
+        按时间正序排列（最早的在前），失败时返回空列表。
+        """
+        try:
+            key = f"chat:history:{session_id}"
+            raw = get_redis().lrange(key, 0, max_turns * 2 - 1)
+            # LPUSH 是最新在前，反转为时间正序
+            items = [json.loads(r) for r in reversed(raw)]
+            return items
+        except Exception:
+            return []
+
+    def _save_history(self, session_id: str, user_msg: str, assistant_msg: str,
+                      max_turns: int = 20, ttl: int = 86400) -> None:
+        """保存本轮对话到 Redis List（LPUSH 最新在前，LTRIM 保留 20 轮，24h 过期）"""
+        try:
+            key = f"chat:history:{session_id}"
+            r = get_redis()
+            r.lpush(key, json.dumps({"role": "assistant", "content": assistant_msg}, ensure_ascii=False))
+            r.lpush(key, json.dumps({"role": "user", "content": user_msg}, ensure_ascii=False))
+            r.ltrim(key, 0, max_turns * 2 - 1)
+            r.expire(key, ttl)
+        except Exception:
+            pass  # 记忆失败不阻断主流程
 
     def check_tool_permission(self, tool_name: str, amount: float = 0) -> None:
         """检查工具调用权限
@@ -208,18 +261,34 @@ async def call_go_service(path: str, method: str = "GET",
 async def call_nestjs_api(path: str, method: str = "GET",
                           data: Optional[Dict] = None,
                           user_id: str = "anonymous") -> Dict[str, Any]:
-    """调用 NestJS API"""
+    """调用 NestJS API（P0-2 修复：自动携带顾客 JWT token）"""
     import aiohttp
     nest_url = os.getenv("NESTJS_URL", "http://nestjs-api:3000")
     url = f"{nest_url}{path}"
 
+    # P0-2 修复：从 go_auth 获取顾客 token，携带到 NestJS 请求
+    headers = {"Content-Type": "application/json"}
+    try:
+        from app.core.go_auth import has_request_customer_token, get_request_go_token
+        if has_request_customer_token():
+            token = await get_request_go_token()
+            headers["Authorization"] = f"Bearer {token}"
+    except Exception:
+        pass  # 获取 token 失败不阻断请求
+
     try:
         async with aiohttp.ClientSession() as session:
             if method == "GET":
-                async with session.get(url, timeout=10) as resp:
+                async with session.get(url, headers=headers, timeout=10) as resp:
+                    return {"status": resp.status, "data": await resp.json()}
+            elif method == "PUT":
+                async with session.put(url, json=data, headers=headers, timeout=10) as resp:
+                    return {"status": resp.status, "data": await resp.json()}
+            elif method == "DELETE":
+                async with session.delete(url, json=data, headers=headers, timeout=10) as resp:
                     return {"status": resp.status, "data": await resp.json()}
             else:
-                async with session.post(url, json=data, timeout=10) as resp:
+                async with session.post(url, json=data, headers=headers, timeout=10) as resp:
                     return {"status": resp.status, "data": await resp.json()}
     except Exception as e:
         return {"status": 500, "error": str(e), "data": {}}

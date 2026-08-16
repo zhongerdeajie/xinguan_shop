@@ -7,7 +7,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/main.go
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata netcat-openbsd
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && apk add --no-cache ca-certificates tzdata netcat-openbsd
 WORKDIR /app
 COPY --from=builder /app/main .
 RUN chmod +x main

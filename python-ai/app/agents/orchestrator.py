@@ -183,24 +183,74 @@ class Orchestrator:
         # Step 1: 意图识别（工业级漏斗：关键词快路 → Embedding → LLM 兜底 → OOS）
         intent_conf = 0.0
         intent_method = "keyword"
-        try:
-            from app.core.intent_classifier import get_intent_classifier
-            intent_result = await get_intent_classifier().classify(message, role)
-            intent = intent_result["intent"]
-            intent_conf = intent_result["confidence"]
-            intent_method = intent_result["method"]
-        except Exception:
-            # 任何 API 故障都降级到关键词识别，保证聊天不中断
-            intent = classify_intent(message, role)
 
-        # OOS：不路由到任何 Agent，诚实回复
+        # P0-1 上下文感知：确认词 + 历史上下文 → 路由到对应 Agent
+        # 精确匹配：先检查 aftersales 上下文（退款/取消订单），再检查 nl_order 上下文（方案/菜品）
+        _confirm_words = ["确认", "下单", "好的", "可以", "确定", "就这个", "选方案", "就要"]
+        _aftersales_confirm_words = ["确认退款", "确认取消", "确定退款", "确定取消", "同意退款"]
+        _is_aftersales_confirm = any(w in message for w in _aftersales_confirm_words)
+        _is_general_confirm = any(w in message for w in _confirm_words)
+        if (_is_aftersales_confirm or _is_general_confirm) and session_id:
+            try:
+                from app.agents.base import get_redis
+                import json as _json
+                _raw = get_redis().lrange(f"chat:history:{session_id}", 0, 4)
+                _recent = [_json.loads(r) for r in _raw]
+                _assistant_msgs = [item.get("content", "") for item in _recent if item.get("role") == "assistant"]
+                _all_ctx = " ".join(_assistant_msgs)
+                # 优先检测 aftersales 上下文（退款/取消订单/售后）
+                _has_aftersales_ctx = any(kw in _all_ctx for kw in ["退款", "取消订单", "售后", "退货", "投诉"])
+                # 再检测 nl_order 上下文（方案/菜品/下单/确认下单）
+                _has_order_ctx = any(kw in _all_ctx for kw in ["方案", "菜品", "确认下单", "加入购物车", "合计"])
+                if _is_aftersales_confirm and _has_aftersales_ctx:
+                    intent = "aftersales"
+                    intent_conf = 0.9
+                    intent_method = "context_aware"
+                elif _has_order_ctx and not _has_aftersales_ctx:
+                    intent = "nl_order"
+                    intent_conf = 0.9
+                    intent_method = "context_aware"
+                elif _has_aftersales_ctx:
+                    # 即使是通用确认词，如果上下文是售后也路由到 aftersales
+                    intent = "aftersales"
+                    intent_conf = 0.9
+                    intent_method = "context_aware"
+                else:
+                    raise Exception("no matching context")
+            except Exception:
+                try:
+                    from app.core.intent_classifier import get_intent_classifier
+                    intent_result = await get_intent_classifier().classify(message, role)
+                    intent = intent_result["intent"]
+                    intent_conf = intent_result["confidence"]
+                    intent_method = intent_result["method"]
+                except Exception:
+                    intent = classify_intent(message, role)
+        else:
+            try:
+                from app.core.intent_classifier import get_intent_classifier
+                intent_result = await get_intent_classifier().classify(message, role)
+                intent = intent_result["intent"]
+                intent_conf = intent_result["confidence"]
+                intent_method = intent_result["method"]
+            except Exception:
+                # 任何 API 故障都降级到关键词识别，保证聊天不中断
+                intent = classify_intent(message, role)
+
+        # OOS：不路由到任何 Agent，走 Fallback 兜底（学 Rasa Fallback Policy）
         if intent == "out_of_scope":
             return {
                 "intent": "out_of_scope",
-                "agent": "未匹配",
-                "response": "这个问题我暂时帮不上忙。我可以帮你点菜、凑单、比价、处理售后，或者给商家出运营方案——试试换一种说法？",
+                "agent": "fallback",
+                "response": (
+                    "我不太确定您想做什么。您可以试试：\n"
+                    "• 说『我要下单』+ 菜名 来点餐\n"
+                    "• 说『预算XX元帮我凑单』来凑单\n"
+                    "• 说『推荐几个菜』来获取推荐"
+                ),
                 "entities": extract_entities(message),
                 "tools_used": [],
+                "order_suggestion": None,
                 "error": False,
                 "intent_confidence": intent_conf,
                 "intent_method": intent_method,

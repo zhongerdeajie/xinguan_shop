@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface Profile {
   id: number;
@@ -65,17 +66,26 @@ export default function AccountPage() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  // 初次挂载：鉴权 + 读取 URL tab 参数
   useEffect(() => {
     if (!localStorage.getItem('customerToken')) {
       router.push('/account/login');
       return;
     }
-    // 从 URL 参数读取 tab（如 /account?tab=chat），避免 useSearchParams 的静态生成限制
     const urlTab = new URLSearchParams(window.location.search).get('tab');
     if (urlTab === 'orders' || urlTab === 'browse' || urlTab === 'chat' || urlTab === 'coupons') {
       setTab(urlTab);
+    } else {
+      load();
     }
+  }, []);
+
+  // tab 变化时重新加载数据并同步 URL
+  useEffect(() => {
     load();
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.toString());
   }, [tab]);
 
   async function load() {
@@ -90,11 +100,10 @@ export default function AccountPage() {
       } else if (tab === 'browse') {
         const res = await fetch('/api/customer/history', { headers });
         setBrowse(await res.json());
-      } else {
+      } else if (tab === 'chat') {
         const res = await fetch('/api/customer/chat-history', { headers });
         setChat(await res.json());
-      }
-      if (tab === 'coupons') {
+      } else if (tab === 'coupons') {
         const res = await fetch('/api/customer/coupons', { headers });
         setCoupons(await res.json());
       }
@@ -166,7 +175,12 @@ export default function AccountPage() {
           ).map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setTab(key)}
+              onClick={() => {
+                setTab(key);
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', key);
+                window.history.replaceState({}, '', url.toString());
+              }}
               className={`flex-1 py-2 rounded-full text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
                 tab === key ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
               }`}
@@ -286,7 +300,7 @@ export default function AccountPage() {
                   }`}
                 >
                   {m.intent && <div className="text-[11px] text-gray-400 mb-1">由 {m.intent} 回答</div>}
-                  {m.content}
+                  <MarkdownRenderer content={m.content} />
                 </div>
               </div>
             ))}

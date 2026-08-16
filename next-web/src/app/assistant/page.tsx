@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -20,35 +21,20 @@ const SUGGESTIONS = [
   '辣椒炒肉和米饭一共多少钱',
 ];
 
-const I18N: Record<string, Record<string, string>> = {
-  zh: {
-    brand: '星选 AI 购物管家',
-    back: '← 返回菜单',
-    placeholder: '例如：我想点两个菜，预算 40 元',
-    send: '发送',
-    thinking: '正在思考中...',
-    saved: '对话已自动保存到我的聊天记录 →',
-    loginHint: '登录后聊天记录、浏览记录、订单会自动保存 →',
-    confirm: '确认下单 ¥',
-    ordering: '正在下单并支付...',
-    ordered: '下单成功！去我的订单查看 →',
-  },
-  en: {
-    brand: 'StarSelect AI Shopping',
-    back: '← Back to menu',
-    placeholder: 'e.g. Two dishes, budget 40 yuan',
-    send: 'Send',
-    thinking: 'Thinking...',
-    saved: 'Conversation saved to my history →',
-    loginHint: 'Login to save chats, browsing & orders →',
-    confirm: 'Confirm order ¥',
-    ordering: 'Placing order...',
-    ordered: 'Order placed! View my orders →',
-  },
+const T = {
+  brand: '星选 AI 购物管家',
+  back: '← 返回菜单',
+  placeholder: '例如：我想点两个菜，预算 40 元',
+  send: '发送',
+  thinking: '正在思考中...',
+  saved: '对话已自动保存到我的聊天记录 →',
+  loginHint: '登录后聊天记录、浏览记录、订单会自动保存 →',
+  confirm: '确认下单 ¥',
+  ordering: '正在下单并支付...',
+  ordered: '下单成功！去我的订单查看 →',
 };
 
 export default function AssistantPage() {
-  const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
@@ -65,15 +51,23 @@ export default function AssistantPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('lang');
-    if (saved === 'en' || saved === 'zh') setLang(saved);
+    // 加载本地缓存的未登录聊天记录
+    const cached = localStorage.getItem('guestChatHistory');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 1) {
+          setMessages(parsed);
+        }
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const t = I18N[lang];
+  const t = T;
 
   async function send(text?: string) {
     const content = (text ?? input).trim();
@@ -96,14 +90,26 @@ export default function AssistantPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.response || '（AI 没有返回内容，请重试）',
-          intent: data.agent || data.intent,
-        },
-      ]);
+      const assistantMsg = {
+        role: 'assistant' as const,
+        content: data.response || '（AI 没有返回内容，请重试）',
+        intent: data.agent || data.intent,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      // 未登录时将聊天记录缓存到 localStorage
+      if (!customerToken) {
+        setMessages((prev) => {
+          const guestMessages = [...prev, assistantMsg];
+          localStorage.setItem('guestChatHistory', JSON.stringify(guestMessages));
+          return prev;
+        });
+      } else {
+        // 已登录，检查是否有本地缓存的聊天记录需要同步
+        const cached = localStorage.getItem('guestChatHistory');
+        if (cached) {
+          localStorage.removeItem('guestChatHistory');
+        }
+      }
       if (data.order_suggestion?.items?.length) {
         setOrderSuggestion(data.order_suggestion);
       }
@@ -187,12 +193,6 @@ export default function AssistantPage() {
     setListening(true);
   }
 
-  function switchLang() {
-    const next = lang === 'zh' ? 'en' : 'zh';
-    setLang(next);
-    localStorage.setItem('lang', next);
-  }
-
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
       <header className="frosted sticky top-0 z-40">
@@ -204,12 +204,6 @@ export default function AssistantPage() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <button
-              onClick={switchLang}
-              className="pill pill-soft !h-9 !px-4 !text-[13px]"
-            >
-              {lang === 'zh' ? 'EN' : '中文'}
-            </button>
             <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>
               {t.back}
             </Link>
@@ -235,7 +229,7 @@ export default function AssistantPage() {
                   由 {m.intent} Agent 回答
                 </div>
               )}
-              {m.content}
+              <MarkdownRenderer content={m.content} />
             </div>
           </div>
         ))}

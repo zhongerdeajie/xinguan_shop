@@ -25,7 +25,7 @@ export function base64UrlDecode(input: string): string {
 }
 
 /** Buffer → base64url (convert HMAC signatures back to JWT wire format). */
-export function bytesToBase64Url(bytes: Uint8Array): string {
+export function bytesToBase64Url(bytes: Uint8Array | Buffer): string {
   return Buffer.from(bytes)
     .toString('base64')
     .replace(/\+/g, '-')
@@ -42,7 +42,7 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
 }
 
 /** HS256 sign of header.payload (Node-side helper used by tests). */
-export function hmacSign(secret: string, data: string): string {
+export function hmacSign(secret: string, data: string): Buffer {
   return createHmac('sha256', secret).update(data).digest();
 }
 

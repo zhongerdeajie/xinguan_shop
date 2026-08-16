@@ -2,6 +2,16 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../common/prisma.service';
 import { CreateDishDto } from './dto/create-dish.dto';
 import { UpdateDishDto } from './dto/update-dish.dto';
+import Redis from 'ioredis';
+
+// P1-2：Redis 连接单例（用于价格历史 ZSET）
+let redisClient: Redis | null = null;
+function getRedisClient(): Redis {
+  if (!redisClient) {
+    redisClient = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+  }
+  return redisClient;
+}
 
 // 简单内存缓存：菜单接口 15 秒内不重复查库（管理端改价/增删时清空）
 const menuCache = new Map<string, { time: number; data: any }>();
@@ -93,7 +103,7 @@ export class DishesService {
   }
 
   async update(id: number, data: UpdateDishDto) {
-    await this.findOne(id);
+    const old = await this.findOne(id);
     const updateData: Record<string, unknown> = { updateTime: new Date() };
     if (data.name !== undefined) updateData.name = data.name;
     if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
@@ -101,7 +111,7 @@ export class DishesService {
     if (data.image !== undefined) updateData.image = data.image;
     if (data.description !== undefined) updateData.description = data.description;
     if (data.status !== undefined) updateData.status = data.status;
-    return this.prisma.dish.update({
+    const updated = await this.prisma.dish.update({
       where: { id },
       data: updateData,
       include: {
@@ -109,6 +119,23 @@ export class DishesService {
         flavors: true,
       },
     });
+
+    // P1-2：价格变动时写 Redis ZSET（price:history:{id}，score=时间戳，member=价格）
+    if (data.price !== undefined && Number(data.price) !== Number(old.price)) {
+      try {
+        const ts = Date.now();
+        const key = `price:history:${id}`;
+        const redis = getRedisClient();
+        await redis.zadd(key, ts, String(data.price));
+        // 清理 90 天前的旧数据
+        await redis.zremrangebyscore(key, 0, ts - 90 * 86400 * 1000);
+      } catch (e) {
+        // 价格历史写入失败不影响主流程
+        console.warn('价格历史写入失败:', e);
+      }
+    }
+
+    return updated;
   }
 
   async remove(id: number) {

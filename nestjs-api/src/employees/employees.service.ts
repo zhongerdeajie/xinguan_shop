@@ -14,6 +14,7 @@ export class EmployeesService {
         skip,
         take: limit,
         orderBy: { createTime: 'desc' },
+        select: { id: true, name: true, username: true, phone: true, sex: true, idNumber: true, status: true, createTime: true, updateTime: true },
       }),
       this.prisma.employee.count({ where }),
     ]);
@@ -31,6 +32,7 @@ export class EmployeesService {
   async findOne(id: number) {
     const employee = await this.prisma.employee.findUnique({
       where: { id },
+      select: { id: true, name: true, username: true, phone: true, sex: true, idNumber: true, status: true, createTime: true, updateTime: true },
     });
     if (!employee) {
       throw new NotFoundException(`员工 ID ${id} 不存在`);
@@ -61,6 +63,7 @@ export class EmployeesService {
         createTime: new Date(),
         updateTime: new Date(),
       },
+      select: { id: true, name: true, username: true, phone: true, sex: true, idNumber: true, status: true, createTime: true, updateTime: true },
     });
   }
 
@@ -92,6 +95,7 @@ export class EmployeesService {
         ...data,
         updateTime: new Date(),
       },
+      select: { id: true, name: true, username: true, phone: true, sex: true, idNumber: true, status: true, createTime: true, updateTime: true },
     });
   }
 

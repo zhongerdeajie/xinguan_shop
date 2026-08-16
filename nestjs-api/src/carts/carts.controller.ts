@@ -8,13 +8,16 @@ import {
   Param,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateCartDto, UpdateCartDto } from './dto';
 
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CartsService } from './carts.service';
+import { CustomerAuthGuard } from '../auth/customer-auth.guard';
 
 @ApiTags('购物车管理')
+@UseGuards(CustomerAuthGuard)
 @Controller('carts')
 export class CartsController {
   constructor(private readonly cartsService: CartsService) {}

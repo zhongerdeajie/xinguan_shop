@@ -26,16 +26,20 @@ export default function CartPage() {
   const [error, setError] = useState('');
   const [coupons, setCoupons] = useState<MyCoupon[]>([]);
   const [selectedCouponId, setSelectedCouponId] = useState<number | ''>('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const customerHeaders = (): Record<string, string> => ({
     Authorization: `Bearer ${localStorage.getItem('customerToken')}`,
   });
 
   useEffect(() => {
-    if (!localStorage.getItem('customerToken')) {
-      router.push('/account/login');
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      setIsLoggedIn(false);
+      setLoading(false);
       return;
     }
+    setIsLoggedIn(true);
     load();
   }, []);
 
@@ -110,8 +114,8 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <header className="frosted">
-        <div className="container mx-auto px-4 min-h-16 py-3 flex flex-wrap items-center justify-between gap-2">
+      <header className="frosted sticky top-0 z-40">
+        <div className="container mx-auto px-4 min-h-14 py-2.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🍜</span>
             <span className="serif text-xl font-semibold" style={{ color: 'var(--accent)' }}>购物车</span>
@@ -124,14 +128,21 @@ export default function CartPage() {
 
       <main className="container mx-auto max-w-3xl px-4 py-6">
         {loading ? (
-          <div className="text-center py-16 text-gray-400">加载中...</div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl shadow-sm">
+          <div className="text-center py-16" style={{ color: 'var(--muted)' }}>加载中...</div>
+        ) : !isLoggedIn ? (
+          <div className="text-center py-16 xcard">
             <div className="text-4xl mb-3">🛒</div>
-            <p className="text-gray-400 mb-4">购物车是空的</p>
-            <Link href="/" className="text-orange-500 text-sm font-medium">
-              去点餐 →
-            </Link>
+            <p className="mb-4" style={{ color: 'var(--muted)' }}>登录后可查看购物车</p>
+            <Link href="/account/login" className="pill pill-accent !h-10 !px-6 inline-block">去登录</Link>
+            <div className="mt-3">
+              <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>暂不登录，继续浏览 →</Link>
+            </div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-16 xcard">
+            <div className="text-4xl mb-3">🛒</div>
+            <p className="mb-4" style={{ color: 'var(--muted)' }}>购物车空空，去首页看看</p>
+            <Link href="/" className="pill pill-accent !h-10 !px-6 inline-block">去点餐 →</Link>
           </div>
         ) : (
           <>

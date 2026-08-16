@@ -13,8 +13,9 @@
 5. 询问用户确认
 6. 调用 Go 服务下单
 """
-from typing import Dict, Any, List
-from app.agents.base import BaseAgent, call_go_service
+from typing import Dict, Any, List, Optional
+import re
+from app.agents.base import BaseAgent, call_go_service, call_nestjs_api
 
 
 class NLOrderAgent(BaseAgent):
@@ -57,8 +58,61 @@ class NLOrderAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
-        """多步推理主流程"""
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
+        """多步推理主流程（P0-2 改造：支持真下单）"""
+        history = history or []
+
+        # P0-2 Step 0: 确认下单场景（用户说"确认""下单""好的"）
+        if self._is_confirmation(message) and history:
+            order = self._extract_pending_order(history)
+            if order:
+                result = await call_nestjs_api("/v1/orders", method="POST", data={
+                    "addressBookId": 1,
+                    "payMethod": 1,
+                    "dishes": order["items"],
+                })
+                if result.get("status") in (200, 201):
+                    self.record_tool_usage("create_order")
+                    order_no = result.get("data", {}).get("number") or result.get("data", {}).get("id", "未知")
+                    return f"✅ 下单成功！订单号：{order_no}\n感谢您的惠顾，预计30分钟内送达。"
+                else:
+                    return f"抱歉，下单失败：{result.get('error') or result.get('data', {}).get('message', '未知错误')}。请稍后重试或联系客服。"
+
+        # P0-1 修复：选方案场景（用户说"选第一个""选方案1""就要方案2"）
+        selected = self._extract_selection(message)
+        if selected and history:
+            dishes = self._extract_dishes_from_history(history, selected)
+            if dishes:
+                reply = f"好的，您选了第 {selected} 个方案：\n"
+                total = 0.0
+                for d in dishes:
+                    price = float(d.get("price", 0) or 0)
+                    reply += f"- {d['name']} - {price} 元\n"
+                    total += price
+                reply += f"\n合计：{total} 元\n\n确认下单吗？回复『确认』即可下单。"
+                return reply
+
+        # P0-2 Step 0.5: 直接点菜场景（用户说"我要一份拍黄瓜""来两个辣椒炒肉"）
+        dish_names = self._extract_dishes(message)
+        if dish_names:
+            found_dishes = []
+            for name in dish_names:
+                r = await call_nestjs_api(f"/v1/dishes?keyword={name}&limit=3")
+                if r.get("status") == 200:
+                    dishes = r.get("data", {}).get("data") or r.get("data", {}).get("list") or []
+                    if dishes:
+                        found_dishes.append(dishes[0])
+                        self.record_tool_usage("search_dishes")
+            if found_dishes:
+                total = sum(float(d.get("price", 0)) for d in found_dishes)
+                reply = "我找到了您要的菜：\n"
+                for d in found_dishes:
+                    reply += f"- {d.get('name')} - {d.get('price')} 元\n"
+                reply += f"\n合计：{total} 元\n\n确认下单吗？回复『确认』即可下单。"
+                return reply
+            else:
+                return f"抱歉，没找到「{'、'.join(dish_names)}」这些菜。您可以换个说法，或者说『推荐几个菜』让我帮您挑。"
 
         # Step 1: 解析用户意图
         people_count = entities.get("people_count", 1)
@@ -80,30 +134,27 @@ class NLOrderAgent(BaseAgent):
         candidates = {"荤菜": [], "素菜": [], "汤品": []}
 
         if meat_count > 0:
-            r = await call_go_service(
-                f"/api/v1/dishes?categoryType=1&maxPrice={budget // (meat_count + veg_count + soup_count + 1) * 2}&limit=8",
-                user_id=user_id
+            r = await call_nestjs_api(
+                f"/v1/dishes?categoryType=1&maxPrice={budget // (meat_count + veg_count + soup_count + 1) * 2}&limit=8"
             )
             if r.get("status") == 200:
-                candidates["荤菜"] = r["data"].get("data", [])[:5]
+                candidates["荤菜"] = (r["data"].get("data") or r["data"].get("list") or [])[:5]
                 self.record_tool_usage("search_dishes")
 
         if veg_count > 0:
-            r = await call_go_service(
-                f"/api/v1/dishes?categoryType=2&maxPrice={budget // 4}&limit=8",
-                user_id=user_id
+            r = await call_nestjs_api(
+                f"/v1/dishes?categoryType=2&maxPrice={budget // 4}&limit=8"
             )
             if r.get("status") == 200:
-                candidates["素菜"] = r["data"].get("data", [])[:5]
+                candidates["素菜"] = (r["data"].get("data") or r["data"].get("list") or [])[:5]
                 self.record_tool_usage("search_dishes")
 
         if soup_count > 0:
-            r = await call_go_service(
-                f"/api/v1/dishes?categoryType=3&maxPrice={budget // 4}&limit=8",
-                user_id=user_id
+            r = await call_nestjs_api(
+                f"/v1/dishes?categoryType=3&maxPrice={budget // 4}&limit=8"
             )
             if r.get("status") == 200:
-                candidates["汤品"] = r["data"].get("data", [])[:3]
+                candidates["汤品"] = (r["data"].get("data") or r["data"].get("list") or [])[:3]
                 self.record_tool_usage("search_dishes")
 
         # Step 3: 组合方案
@@ -178,3 +229,77 @@ class NLOrderAgent(BaseAgent):
         # 按总价排序
         combinations.sort(key=lambda x: -x["total"])  # 价格高的优先（更接近预算）
         return combinations
+
+    # ---------- P0-2：真下单辅助方法 ----------
+    def _extract_selection(self, message: str) -> Optional[int]:
+        """从用户消息中提取选择的方案编号（如『选第一个』『方案2』『就要第3个』）"""
+        m = re.search(r'(?:选|就要|要)?\s*(?:第?)([一二三四五六1-9])\s*(?:个|方案)?', message)
+        if m:
+            num_str = m.group(1)
+            num_map = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
+            return num_map.get(num_str, int(num_str) if num_str.isdigit() else None)
+        return None
+
+    def _extract_dishes_from_history(self, history: List[Dict[str, str]], selection: int) -> List[Dict[str, Any]]:
+        """从历史消息中提取上一轮推荐的第 N 个方案的菜品列表"""
+        for item in reversed(history):
+            if item.get("role") != "assistant":
+                continue
+            content = item.get("content", "")
+            # 匹配方案分隔（**方案 1** 或 **方案1**）
+            plans = re.split(r'\*\*方案\s*[\d一二三四五六]\*\*', content)
+            if len(plans) > selection:
+                plan_text = plans[selection]  # selection 是 1-based
+                # 提取菜品行：- 菜名 - 价格 元
+                dish_lines = re.findall(r'-\s*(.+?)\s*-\s*([\d.]+)\s*元', plan_text)
+                if dish_lines:
+                    return [{"name": name.strip(), "price": float(price)} for name, price in dish_lines]
+            # 也尝试匹配不带方案编号的菜品列表
+            if selection == 1:
+                dish_lines = re.findall(r'-\s*(.+?)\s*-\s*([\d.]+)\s*元', content)
+                if dish_lines:
+                    return [{"name": name.strip(), "price": float(price)} for name, price in dish_lines]
+        return []
+
+    def _is_confirmation(self, message: str) -> bool:
+        """检测用户是否在确认下单"""
+        confirm_words = ["确认", "下单", "好的", "可以", "确定", "就这个", "选方案", "就要"]
+        return any(w in message for w in confirm_words)
+
+    def _extract_pending_order(self, history: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+        """从历史里解析上一轮推荐的菜品，构造待下单数据"""
+        # 倒序找最近一条 assistant 的推荐消息
+        for item in reversed(history):
+            if item.get("role") != "assistant":
+                continue
+            content = item.get("content", "")
+            # 匹配 "- 菜名 - 价格 元" 格式的推荐列表
+            dish_lines = re.findall(r"-\s*(.+?)\s*-\s*([\d.]+)\s*元", content)
+            if dish_lines:
+                items = [{"name": name.strip(), "price": float(price), "count": 1}
+                         for name, price in dish_lines]
+                return {"items": items}
+        return None
+
+    def _extract_dishes(self, message: str) -> List[str]:
+        """从用户消息中提取菜名（如『一份拍黄瓜』『两个辣椒炒肉』）"""
+        dishes = []
+        # 匹配『一/两/三/几 + 份/个/碗/盘 + 菜名』
+        patterns = [
+            r"[一两三四五]?\s*(?:份|个|碗|盘|例)\s*([\u4e00-\u9fa5]{2,8})",
+            r"(?:要|点|来)\s*(?:一|两|三)?\s*(?:份|个|碗|盘)?\s*([\u4e00-\u9fa5]{2,8})",
+        ]
+        for pattern in patterns:
+            matches = re.findall(pattern, message)
+            for m in matches:
+                # 过滤掉非菜名的常见词
+                if m not in ("一下", "一些", "什么", "怎么", "多少", "预算", "块钱"):
+                    dishes.append(m)
+        # 去重
+        seen = set()
+        result = []
+        for d in dishes:
+            if d not in seen:
+                seen.add(d)
+                result.append(d)
+        return result[:3]  # 最多取3个菜名

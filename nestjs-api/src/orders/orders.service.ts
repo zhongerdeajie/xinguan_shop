@@ -47,7 +47,7 @@ export class OrdersService {
         take: limit,
         orderBy: { orderTime: 'desc' },
         include: {
-          user: true,
+          user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
           addressBook: true,
           orderDetails: {
             include: {
@@ -74,7 +74,7 @@ export class OrdersService {
     const order = await this.prisma.orders.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
         orderDetails: {
           include: {
@@ -122,7 +122,7 @@ export class OrdersService {
         orderTime: data.orderTime || new Date(),
       },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
         orderDetails: true,
       },
@@ -135,7 +135,7 @@ export class OrdersService {
       where: { id },
       data,
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
         orderDetails: true,
       },
@@ -189,7 +189,7 @@ export class OrdersService {
       where: { id },
       data: updateData,
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
         orderDetails: true,
       },

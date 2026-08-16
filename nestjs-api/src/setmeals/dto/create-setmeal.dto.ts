@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -19,10 +20,9 @@ export class CreateSetmealDto {
   @IsInt()
   categoryId: number;
 
-  @ApiProperty({ example: '88.00' })
-  @IsString()
-  @Matches(/^\d+(\.\d{1,2})?$/, { message: '价格格式不正确' })
-  price: string;
+  @ApiProperty({ example: 88.00 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  price: number;
 
   @ApiProperty({ required: false })
   @IsOptional()

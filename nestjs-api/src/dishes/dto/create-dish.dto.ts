@@ -3,6 +3,7 @@ import {
   IsDecimal,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -20,10 +21,9 @@ export class CreateDishDto {
   @IsInt()
   categoryId: number;
 
-  @ApiProperty({ example: '38.00' })
-  @IsString()
-  @Matches(/^\d+(\.\d{1,2})?$/, { message: '价格格式不正确（最多 2 位小数）' })
-  price: string;
+  @ApiProperty({ example: 38.00 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  price: number;
 
   @ApiProperty({ required: false, example: 'https://example.com/dish.jpg' })
   @IsOptional()

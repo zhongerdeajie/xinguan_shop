@@ -73,7 +73,11 @@ class LangChainRAG:
 
         # 初步检索：召回更多候选，再由 BGE 精排
         recall_k = 20 if self.enable_rerank else 5
-        candidates = self.vector_store.search(question, top_k=recall_k)
+        # P1-1 适配 QdrantVectorStore：先 embedding 再搜索
+        from app.core.embedding import get_embedding
+        _emb = get_embedding()
+        _query_vec = await _emb.embed(question)
+        candidates = self.vector_store.search(_query_vec, top_k=recall_k)
         
         if not candidates:
             context = "没有找到相关信息"
@@ -136,7 +140,11 @@ class LangChainRAG:
         """检索 + BGE 重排序"""
         # 召回更多候选用于重排序
         recall_k = 20 if self.enable_rerank else top_k
-        candidates = self.vector_store.search(query, top_k=recall_k, entity_type=entity_type)
+        # P1-1 适配 QdrantVectorStore：先 embedding 再搜索
+        from app.core.embedding import get_embedding
+        _emb = get_embedding()
+        _query_vec = await _emb.embed(query)
+        candidates = self.vector_store.search(_query_vec, top_k=recall_k, entity_type=entity_type)
         
         if not candidates:
             return []

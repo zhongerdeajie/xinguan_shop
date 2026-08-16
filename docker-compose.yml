@@ -54,10 +54,12 @@ services:
       - MINIMAX_EMBEDDING_MODEL=${MINIMAX_EMBEDDING_MODEL:-embo-01}
       - MINIMAX_EMBEDDING_URL=${MINIMAX_EMBEDDING_URL:-https://api.minimaxi.com/v1/embeddings}
       - EMBEDDING_DIM=${EMBEDDING_DIM:-1536}
-      - NO_PROXY=localhost,127.0.0.1,mysql,redis,go-service,nestjs-api,next-web,vue-admin,.internal,open.bigmodel.cn
+      - QDRANT_URL=http://qdrant:6333
+      - NO_PROXY=localhost,127.0.0.1,mysql,redis,go-service,nestjs-api,next-web,vue-admin,.internal,open.bigmodel.cn,qdrant
     depends_on:
       - redis
       - mysql
+      - qdrant
     restart: unless-stopped
 
   # NestJS API
@@ -70,6 +72,7 @@ services:
       - DATABASE_URL=mysql://root:${MYSQL_PASSWORD}@mysql:3306/starselect
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://python-ai:5000
+      - PYTHON_AI_URL=http://python-ai:5000
       - JWT_SECRET=${JWT_SECRET}
       - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-123456}
     depends_on:
@@ -117,6 +120,16 @@ services:
       - mysql-data:/var/lib/mysql
     restart: unless-stopped
 
+  # Qdrant 向量数据库（P1-1：替换 SimpleVectorStore，数据持久化到磁盘）
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
 volumes:
   redis-data:
   mysql-data:
+  qdrant_data:

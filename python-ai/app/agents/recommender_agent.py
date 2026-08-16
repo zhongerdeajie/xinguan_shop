@@ -8,7 +8,7 @@
 3. 主动告知用户"哪些是广告 / 哪些是中立推荐"
 4. 一键关闭赞助内容
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from app.agents.base import BaseAgent, call_go_service
 
 
@@ -41,7 +41,8 @@ class RecommenderAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
         """推荐主流程"""
 
         # Step 1: 解析用户需求（已由 Orchestrator 完成，这里仅作示意）

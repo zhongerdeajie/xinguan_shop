@@ -9,7 +9,7 @@
 
 性能：80ms 内给出最优解（vs 暴力 1.2s）
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from app.agents.base import BaseAgent, call_go_service
 
 
@@ -127,7 +127,8 @@ class SmartBargainAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
         """凑单主流程"""
 
         # 提取预算和已花费（从 message 中解析）

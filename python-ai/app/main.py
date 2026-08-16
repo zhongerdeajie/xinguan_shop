@@ -5,9 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.config import settings
 from app.api.routes import router
-from app.core.simple_vector import SimpleVectorStore
+from app.core.limiter import limiter
+from app.core.qdrant_vector import QdrantVectorStore
 from app.core.redis_cache import RedisCache
 
 
@@ -19,7 +23,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动
-    app.state.vector_store = SimpleVectorStore(
+    app.state.vector_store = QdrantVectorStore(
         api_key=settings.MINIMAX_API_KEY or settings.ZHIPU_API_KEY,
         cache_file=os.path.join(DATA_DIR, "vectors.npz")
     )
@@ -47,6 +51,10 @@ app = FastAPI(
     version="3.0.0",
     lifespan=lifespan,
 )
+
+# P2-2：注册限流器和 429 异常处理器
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

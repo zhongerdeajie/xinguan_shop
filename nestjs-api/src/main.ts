@@ -1,10 +1,26 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // 请求日志中间件：记录每个 HTTP 请求的方法、路径、状态码和耗时
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now();
+    const { method, originalUrl, ip } = req;
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const { statusCode } = res;
+      const userAgent = req.get('user-agent') || '-';
+      console.log(
+        `[NestJS] ${ip} - ${method} ${originalUrl} ${statusCode} ${duration}ms "${userAgent}"`,
+      );
+    });
+    next();
+  });
 
   // API 版本控制
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

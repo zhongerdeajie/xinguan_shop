@@ -9,10 +9,10 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// 请求拦截器 — 自动附加 token
+// 请求拦截器 — 自动附加 token（兼容管理员 token 和顾客 customerToken）
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || localStorage.getItem('customerToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -26,9 +26,13 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
+        const isCustomer = !!localStorage.getItem('customerToken');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        localStorage.removeItem('customerToken');
+        localStorage.removeItem('customerUser');
+        // 顾客跳顾客登录页，管理员跳管理员登录页
+        window.location.href = isCustomer ? '/account/login' : '/login';
       }
     }
     return Promise.reject(error);

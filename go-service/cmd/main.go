@@ -54,7 +54,7 @@ func main() {
 	// Gin 路由
 	gin.SetMode(cfg.GinMode)
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.CORS(), middleware.RateLimit(rdb, 20, time.Second))
+	r.Use(gin.Recovery(), gin.Logger(), middleware.CORS(), middleware.RateLimit(rdb, 20, time.Second))
 
 	// 注册路由
 	app.Register(r, appdeps.Deps{

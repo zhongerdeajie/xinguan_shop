@@ -15,6 +15,9 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 from app.config import settings
 
@@ -82,6 +85,66 @@ OOS_EXAMPLES: List[str] = [
     "你叫什么名字",
     "帮我翻译一段英文",
 ]
+
+# ==================== 稀疏特征（学Rasa CountVectors）====================
+
+# 稀疏特征:词n-gram(学Rasa的CountVectorsFeaturizer)
+_SPARSE_VECTORIZER = CountVectorizer(
+    analyzer='char_wb',  # 字符级n-gram,适合中文
+    ngram_range=(2, 4),  # 2-4字gram,捕捉"我要下单""帮我点餐"这种动作短语
+)
+
+# 预先拟合所有意图例句
+_ALL_EXAMPLES: List[str] = []
+_EXAMPLE_LABELS: List[str] = []
+for _intent, _examples in INTENT_EXAMPLES.items():
+    for _ex in _examples:
+        _ALL_EXAMPLES.append(_ex)
+        _EXAMPLE_LABELS.append(_intent)
+_SPARSE_VECTORIZER.fit(_ALL_EXAMPLES)
+
+
+def sparse_similarity(message: str) -> Dict[str, float]:
+    """稀疏特征相似度:学Rasa的CountVectors,捕捉动作短语"""
+    msg_vec = _SPARSE_VECTORIZER.transform([message])
+    ex_vecs = _SPARSE_VECTORIZER.transform(_ALL_EXAMPLES)
+    sims = cosine_similarity(msg_vec, ex_vecs)[0]
+
+    # 按意图聚合最大相似度
+    result: Dict[str, float] = {}
+    for i, label in enumerate(_EXAMPLE_LABELS):
+        if label not in result or sims[i] > result[label]:
+            result[label] = float(sims[i])
+    return result
+
+
+# ==================== 规则快路（学Rasa Rule Policy）====================
+
+# 规则快路:学Rasa的Rule Policy,强动作词直接命中
+STRONG_RULES: Dict[str, List[str]] = {
+    "nl_order": [
+        r"我要?下单", r"帮我?点(餐|菜)", r"来一份", r"点个",
+        r"订餐", r"帮我?安排", r"来两?个",
+    ],
+    "marketing": [
+        r"搞?个?活动", r"策划.*促销", r"活动文案", r"推广方案",
+        r"营销", r"满减活动",
+    ],
+    "aftersales": [
+        r"退款", r"退货", r"投诉", r"少送", r"漏发", r"还没到",
+        r"取消订单", r"取消点?餐", r"不要了", r"申请售后",
+    ],
+}
+
+
+def rule_fast_path(message: str) -> Optional[str]:
+    """规则快路:命中强动作词直接返回意图,跳过embedding"""
+    for intent, patterns in STRONG_RULES.items():
+        for pattern in patterns:
+            if re.search(pattern, message):
+                return intent
+    return None
+
 
 # ==================== 阈值（先用测试标定，再上真实数据调优） ====================
 
@@ -281,43 +344,80 @@ class IndustrialIntentClassifier:
 
     # ---------- 总入口 ----------
     async def classify(self, message: str, role: str = "user") -> Dict:
-        """多层漏斗总入口，返回 {intent, confidence, method, scores, reason}"""
+        """多层漏斗总入口（改造版：规则快路 + 稀疏特征 + 混合打分 + Fallback）
+
+        流程（学 Rasa 4 原则）：
+        1. 规则快路（Rule Policy，强动作词直接命中，优先级最高）
+        2. 关键词快路（原有逻辑，高分且领先才走）
+        3. Embedding + 稀疏特征混合打分（CountVectors 拉回被带偏的判断）
+        4. LLM 少样本兜底（Fallback Policy）
+        """
         message = (message or "").strip()
         if not message:
             return {"intent": "out_of_scope", "confidence": 0.0, "method": "empty", "scores": {}, "reason": "空消息"}
 
-        # 第 1 层：关键词快路
+        if role == "merchant":
+            return {"intent": "marketing", "confidence": 1.0, "method": "role_based", "scores": {}, "reason": "商家角色直接路由到营销"}
+
+        # 第 1 层：规则快路（学 Rasa Rule Policy，强动作词直接命中）
+        rule_intent = rule_fast_path(message)
+        if rule_intent:
+            return {
+                "intent": rule_intent,
+                "confidence": 1.0,
+                "method": "rule_fast_path",
+                "scores": {},
+                "reason": f"命中强规则: {rule_intent}",
+            }
+
+        # 第 2 层：关键词快路（原有逻辑）
         fast = _keyword_fast_path(message, role)
         if fast:
             intent, conf = fast
             return {"intent": intent, "confidence": conf, "method": "keyword", "scores": {}, "reason": "关键词快路"}
 
-        # 第 2 层：Embedding 相似度（带熔断：API 不可用时跳过，避免每次都白等）
-        intent, conf, scores = None, 0.0, {}
+        # 第 3 层：Embedding + 稀疏特征混合打分（学 Rasa CountVectors）
+        dense_scores: Dict[str, float] = {}
+        embed_top_score = 0.0
         if self._embedding_available:
             try:
-                intent, conf, scores = await self._embedding_classify(message)
+                _, embed_top_score, dense_scores = await self._embedding_classify(message)
             except Exception as e:
                 self._embedding_available = False
                 if not self._embedding_warned:
                     self._embedding_warned = True
                     print(f"[intent_classifier] Embedding 层不可用，已熔断（{e}），后续全部走 LLM/关键词")
-        if intent:
+
+        sparse_scores = sparse_similarity(message)
+
+        # 混合打分（稠密 60% + 稀疏 40%）
+        combined: Dict[str, float] = {}
+        for intent_key in INTENT_EXAMPLES:
+            combined[intent_key] = (
+                0.6 * dense_scores.get(intent_key, 0.0)
+                + 0.4 * sparse_scores.get(intent_key, 0.0)
+            )
+
+        best_intent = max(combined, key=lambda k: combined[k])
+        best_score = combined[best_intent]
+
+        # 混合分达到阈值 → 直接采用（学 Rasa Fallback 的阈值判断）
+        if best_score >= 0.55:
             return {
-                "intent": intent,
-                "confidence": round(conf, 3),
-                "method": "embedding",
-                "scores": {k: round(v, 3) for k, v in scores.items()},
-                "reason": "Embedding 相似度最高",
+                "intent": best_intent,
+                "confidence": round(best_score, 3),
+                "method": "hybrid_dense_sparse",
+                "scores": {k: round(v, 3) for k, v in combined.items()},
+                "reason": "稠密+稀疏混合打分",
             }
 
-        # 第 3 层：LLM 少样本兜底
+        # 第 4 层：LLM 少样本兜底（Fallback Policy）
         llm_intent, llm_conf, reason = await self._llm_classify(message)
         return {
             "intent": llm_intent,
             "confidence": round(llm_conf, 3),
             "method": "llm",
-            "scores": {k: round(v, 3) for k, v in scores.items()},
+            "scores": {k: round(v, 3) for k, v in combined.items()},
             "reason": reason,
         }
 

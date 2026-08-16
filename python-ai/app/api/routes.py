@@ -8,6 +8,7 @@ from app.core.langchain_rag import LangChainRAG
 from app.core.simple_vector import SimpleVectorStore
 from app.core.go_auth import reset_request_customer_token, set_request_customer_token
 from app.agents.orchestrator import get_orchestrator, AGENT_REGISTRY
+from app.core.limiter import limiter
 
 
 router = APIRouter()
@@ -102,28 +103,66 @@ async def health():
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest, raw_request: Request, rag: LangChainRAG = Depends(get_rag)):
+@limiter.limit("10/minute")
+async def chat(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
     """AI 对话 - 通过 Orchestrator 路由到 6 个专项 Agent
 
     自动识别用户意图（自然语言下单 / 凑单 / 比价 / 售后 / 营销 / 推荐）
     """
-    auth = raw_request.headers.get("authorization", "")
+    auth = request.headers.get("authorization", "")
     customer_token = auth[7:] if auth.startswith("Bearer ") else None
     context_token = set_request_customer_token(customer_token)
+
+    # P2-1：语义缓存查询（相似度 > 0.98 直接返回缓存答案）
+    # 包含动作词的消息跳过缓存（退款/取消/下单/确认等需要实时处理）
+    from app.core.semantic_cache import semantic_get, semantic_set
+    _skip_cache_words = ["退款", "取消", "退货", "投诉", "确认", "下单", "少送", "漏发", "售后"]
+    _should_skip_cache = any(w in body.message for w in _skip_cache_words)
+    cached_response = await semantic_get(body.message) if not _should_skip_cache else None
+    if cached_response is not None:
+        reset_request_customer_token(context_token)
+        # P2-1 修复：缓存命中时也保存对话历史，保证多轮记忆不被打断
+        try:
+            from app.agents.base import get_redis
+            import json as _json
+            _key = f"chat:history:{body.session_id}"
+            _r = get_redis()
+            _r.lpush(_key, _json.dumps({"role": "assistant", "content": cached_response}, ensure_ascii=False))
+            _r.lpush(_key, _json.dumps({"role": "user", "content": body.message}, ensure_ascii=False))
+            _r.ltrim(_key, 0, 39)
+            _r.expire(_key, 86400)
+        except Exception:
+            pass
+        return {
+            "response": cached_response,
+            "intent": "cached",
+            "agent": "semantic_cache",
+            "entities": {},
+            "tools_used": [],
+            "order_suggestion": None,
+            "error": False,
+            "intent_confidence": 1.0,
+            "intent_method": "semantic_cache",
+        }
+
     try:
         orchestrator = get_orchestrator()
         result = await orchestrator.route(
-            message=request.message,
-            user_id=request.user_id or "anonymous",
-            role=request.role,
-            session_id=request.session_id
+            message=body.message,
+            user_id=body.user_id or "anonymous",
+            role=body.role,
+            session_id=body.session_id
         )
     finally:
         reset_request_customer_token(context_token)
+
+    # P2-1：写入语义缓存（仅缓存成功且非售后的回答，避免缓存动态数据）
+    if not result.get("error") and result.get("intent") not in ("aftersales", "out_of_scope"):
+        await semantic_set(body.message, result.get("response", ""))
     # 个人隐私脱敏 + 生成可确认的订单建议
     result["response"] = mask_pii(result.get("response", ""))
-    result["order_suggestion"] = build_order_suggestion(request.message, result.get("intent"))
-    print(f"[chat] intent={result.get('intent')} message_repr={request.message!r} has_dish={'辣椒炒肉' in request.message} suggestion={result.get('order_suggestion')}")
+    result["order_suggestion"] = build_order_suggestion(body.message, result.get("intent"))
+    print(f"[chat] intent={result.get('intent')} message_repr={body.message!r} has_dish={'辣椒炒肉' in body.message} suggestion={result.get('order_suggestion')}")
     return {
         "response": result["response"],
         "intent": result["intent"],
@@ -162,11 +201,11 @@ async def rag_query(request: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
 async def index_document(request: IndexRequest):
     """索引文档"""
     from app.main import app
-    vs: SimpleVectorStore = app.state.vector_store
+    vs = app.state.vector_store
     from app.core.embedding import get_embedding
     emb = get_embedding()
     vector = emb.embed_sync(request.content, etype="db")
-    await vs.upsert([{
+    vs.add([{
         "doc_id": request.doc_id,
         "entity_type": request.entity_type,
         "entity_id": request.entity_id,

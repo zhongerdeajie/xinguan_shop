@@ -19,7 +19,7 @@ export class AddressesService {
         take: limit,
         orderBy: [{ isDefault: 'desc' }, { createTime: 'desc' }],
         include: {
-          user: true,
+          user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         },
       }),
       this.prisma.addressBook.count({ where }),
@@ -39,7 +39,7 @@ export class AddressesService {
     const address = await this.prisma.addressBook.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
       },
     });
     if (!address) {
@@ -57,13 +57,19 @@ export class AddressesService {
     }
     return this.prisma.addressBook.create({
       data: {
-        ...data,
+        userId: data.userId,
+        consignee: data.consignee,
+        phone: data.phone,
+        provinceName: data.provinceName,
+        cityName: data.cityName,
+        districtName: data.districtName,
+        detail: data.detail,
         isDefault: data.isDefault ?? 0,
         createTime: new Date(),
         updateTime: new Date(),
       },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
       },
     });
   }
@@ -86,7 +92,7 @@ export class AddressesService {
         updateTime: new Date(),
       },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
       },
     });
   }

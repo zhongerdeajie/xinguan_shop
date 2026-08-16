@@ -12,8 +12,9 @@
 4. 工具白名单控制（小额自动退，大额需确认）
 5. 自动通知商家
 """
-from typing import Dict, Any, List
-from app.agents.base import BaseAgent, call_go_service, ToolPermissionDenied
+from typing import Dict, Any, List, Optional
+import re
+from app.agents.base import BaseAgent, call_go_service, call_nestjs_api, ToolPermissionDenied
 
 
 class AftersalesAgent(BaseAgent):
@@ -48,8 +49,30 @@ class AftersalesAgent(BaseAgent):
         ]
 
     async def _execute(self, message: str, user_id: str,
-                       session_id: str, entities: Dict[str, Any]) -> str:
-        """售后主流程"""
+                       session_id: str, entities: Dict[str, Any],
+                       history: Optional[List[Dict[str, str]]] = None) -> str:
+        """售后主流程（P1-3 改造：支持真退款）"""
+        history = history or []
+
+        # P1-3 Step 0: 确认退款场景（用户说"确认退款""确认取消"）
+        if self._is_cancel_confirmation(message) and history:
+            order_id = self._extract_order_id_from_history(history)
+            if order_id:
+                r = await call_nestjs_api(
+                    f"/v1/orders/{order_id}/customer-cancel",
+                    method="PUT",
+                    data={"reason": "用户申请退款"},
+                )
+                if r.get("status") == 200:
+                    self.record_tool_usage("cancel_order")
+                    return f"✅ 订单 {order_id} 已取消，退款将在 1-3 个工作日内原路退回。"
+                else:
+                    return f"取消订单失败：{r.get('error') or r.get('data', {}).get('message', '未知错误')}。请稍后重试或联系客服。"
+
+        # P1-3 Step 0.5: 提取订单号场景（用户说"取消订单123""订单456要退款"）
+        order_id = self._extract_order_id(message)
+        if order_id:
+            return f"找到订单 {order_id}。确认取消并退款吗？回复『确认退款』即可执行。"
 
         # Step 1: 识别问题类型
         issue_type = self._classify_issue(message)
@@ -57,16 +80,14 @@ class AftersalesAgent(BaseAgent):
         if issue_type == "unknown":
             return "请描述您遇到的问题，例如：\n- 我的订单少送了一个菜\n- 我要申请退款\n- 商品质量有问题"
 
-        # Step 2: 拉取最近订单
-        orders_resp = await call_go_service(
-            "/api/v1/orders?limit=1", user_id=user_id
-        )
+        # Step 2: 拉取最近订单（P0-3：改用 NestJS）
+        orders_resp = await call_nestjs_api("/v1/orders?limit=1")
         self.record_tool_usage("get_user_orders")
 
         if orders_resp.get("status") != 200:
             return "查询订单失败，请稍后再试。"
 
-        orders = orders_resp.get("data", {}).get("data", [])
+        orders = orders_resp.get("data", {}).get("data") or orders_resp.get("data", {}).get("list") or []
         if not orders:
             return "您最近没有订单，无法处理售后。"
 
@@ -172,3 +193,34 @@ class AftersalesAgent(BaseAgent):
             f"3. 您可以选择：换货 / 退款 / 部分退款\n\n"
             f"感谢您的反馈，我们会跟进处理。"
         )
+
+    # ---------- P1-3：真退款辅助方法 ----------
+    def _is_cancel_confirmation(self, message: str) -> bool:
+        """检测用户是否在确认退款/取消订单"""
+        confirm_words = ["确认退款", "确认取消", "确定退款", "确定取消", "好的退款", "同意退款"]
+        return any(w in message for w in confirm_words)
+
+    def _extract_order_id(self, message: str) -> Optional[int]:
+        """从用户消息中提取订单号（如『取消订单123』『订单456要退款』）"""
+        m = re.search(r"订单\s*#?\s*(\d+)", message)
+        if m:
+            return int(m.group(1))
+        # 也支持直接数字（如『取消123』）
+        m2 = re.search(r"(?:取消|退款|退)\s*(\d{3,})", message)
+        if m2:
+            return int(m2.group(1))
+        return None
+
+    def _extract_order_id_from_history(self, history: List[Dict[str, str]]) -> Optional[int]:
+        """从历史消息中提取订单号（找最近一条用户消息里的订单号）"""
+        for item in reversed(history):
+            if item.get("role") == "user":
+                order_id = self._extract_order_id(item.get("content", ""))
+                if order_id:
+                    return order_id
+            # 也检查 assistant 消息里的订单号（如『找到订单123』）
+            if item.get("role") == "assistant":
+                m = re.search(r"订单\s*#?\s*(\d+)", item.get("content", ""))
+                if m:
+                    return int(m.group(1))
+        return None

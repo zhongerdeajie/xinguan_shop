@@ -14,8 +14,8 @@ export class CouponService {
     return this.prisma.coupon.create({
       data: {
         title: data.title,
-        amount: data.amount,
-        threshold: data.threshold,
+        amount: String(data.amount),
+        threshold: String(data.threshold),
         status: data.status ?? 1,
         createTime: new Date(),
         updateTime: new Date(),

@@ -8,13 +8,16 @@ import {
   Param,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateAddressDto, UpdateAddressDto } from './dto';
 
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AddressesService } from './addresses.service';
+import { CustomerAuthGuard } from '../auth/customer-auth.guard';
 
 @ApiTags('地址管理')
+@UseGuards(CustomerAuthGuard)
 @Controller('addresses')
 export class AddressesController {
   constructor(private readonly addressesService: AddressesService) {}

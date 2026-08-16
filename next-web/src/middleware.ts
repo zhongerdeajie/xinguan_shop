@@ -77,6 +77,10 @@ async function verifyAdminToken(token: string): Promise<JwtPayload | null> {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // 静态图片文件直接放行（如 /dishes/dish1.jpg）
+  if (/\.(jpg|jpeg|png|webp|gif|svg|ico)$/.test(pathname)) {
+    return NextResponse.next();
+  }
 
   // 服务端拦截：管理端页面在"发出前"必须通过完整验签
   // 以前只看"有没有 cookie"，现在看"token 真不真"——伪造/过期/顾客 token 都进不来

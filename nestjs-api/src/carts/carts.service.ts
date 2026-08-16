@@ -19,7 +19,7 @@ export class CartsService {
         take: limit,
         orderBy: { createTime: 'desc' },
         include: {
-          user: true,
+          user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
           dish: true,
           setmeal: true,
         },
@@ -41,7 +41,7 @@ export class CartsService {
     const cart = await this.prisma.shoppingCart.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         dish: true,
         setmeal: true,
       },
@@ -53,6 +53,18 @@ export class CartsService {
   }
 
   async create(data: CreateCartDto & { userId: number; name?: string; image?: string; amount: number }) {
+    let dish: any = null;
+    let setmeal: any = null;
+    if (data.dishId) {
+      dish = await this.prisma.dish.findUnique({ where: { id: data.dishId } });
+    }
+    if (data.setmealId) {
+      setmeal = await this.prisma.setmeal.findUnique({ where: { id: data.setmealId } });
+    }
+    const name = dish?.name || setmeal?.name || data.name || '';
+    const image = dish?.image || setmeal?.image || data.image || '';
+    const price = dish?.price || setmeal?.price || 0;
+    const amount = price * (data.number || 1);
     return this.prisma.shoppingCart.create({
       data: {
         userId: data.userId,
@@ -60,13 +72,13 @@ export class CartsService {
         setmealId: data.setmealId,
         dishFlavor: data.dishFlavor,
         number: data.number,
-        name: data.name,
-        image: data.image,
-        amount: data.amount,
+        name,
+        image,
+        amount,
         createTime: new Date(),
       },
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         dish: true,
         setmeal: true,
       },
@@ -79,7 +91,7 @@ export class CartsService {
       where: { id },
       data,
       include: {
-        user: true,
+        user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         dish: true,
         setmeal: true,
       },
