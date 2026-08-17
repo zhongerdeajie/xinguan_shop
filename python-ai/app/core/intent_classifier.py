@@ -125,6 +125,7 @@ STRONG_RULES: Dict[str, List[str]] = {
     "nl_order": [
         r"我要?下单", r"帮我?点(餐|菜)", r"来一份", r"点个",
         r"订餐", r"帮我?安排", r"来两?个",
+        r"我?(想|要)吃", r"想吃", r"来份", r"点一份", r"要一份",
     ],
     "marketing": [
         r"搞?个?活动", r"策划.*促销", r"活动文案", r"推广方案",
@@ -163,6 +164,7 @@ INTENT_ALIASES = {
     "aftersales": {"aftersales", "智能售后", "售后", "退款", "退货", "投诉", "少送", "漏发"},
     "marketing": {"marketing", "智能营销", "营销", "活动文案", "活动策划", "商家运营", "推送"},
     "recommend": {"recommend", "中立推荐", "推荐", "不知道吃什么", "什么好吃"},
+    "chitchat": {"chitchat", "闲聊", "问候", "打招呼", "自我介绍", "你好", "谢谢", "再见"},
     "out_of_scope": {"out_of_scope", "oos", "无关", "闲聊", "其他", "不知道", "不会"},
 }
 
@@ -215,6 +217,14 @@ def _keyword_fast_path(message: str, role: str = "user") -> Optional[Tuple[str, 
     if top[1] >= 20 and top[1] >= second[1] * 2 + 4:
         confidence = min(1.0, 0.5 + top[1] / 100.0)
         return top[0], confidence
+
+    # 弱匹配兜底：只命中一个意图的明确业务词（如"推荐""凑单""贵不贵"）也直接走，
+    # 避免"推荐几个菜""预算50凑单"这类短句被 LLM 误判成 out_of_scope
+    if len(ranked) == 1 and top[1] >= 4:
+        return top[0], min(1.0, 0.4 + top[1] / 100.0)
+    # 两个意图都命中但第一名明显（如"推荐""凑单"同现），取第一
+    if len(ranked) >= 2 and top[1] >= second[1] * 2 and top[1] >= 8:
+        return top[0], min(1.0, 0.5 + top[1] / 100.0)
     return None
 
 
@@ -275,17 +285,19 @@ class IndustrialIntentClassifier:
             "aftersales": "用户要退款、退货、投诉、少送漏发、售后问题",
             "marketing": "用户（商家）要活动策划、文案、推送、分群、促销方案",
             "recommend": "用户不知道该吃什么，要求推荐菜品",
+            "chitchat": "纯问候/打招呼/自我介绍/道谢/告别，如『你好』『你是谁』『谢谢』『再见』",
         }
         lines = []
         for intent, desc in intent_desc.items():
-            examples = INTENT_EXAMPLES[intent][:2]
+            examples = INTENT_EXAMPLES[intent][:2] if intent in INTENT_EXAMPLES else []
             ex_str = "；".join(examples)
             lines.append(f"- {intent}：{desc}。例句：{ex_str}")
         system = (
             "你是电商点餐场景的意图识别器。只能从以下意图里选一个：\n"
             + "\n".join(lines)
-            + "\n- out_of_scope：与点餐/购物/售后/营销完全无关的闲聊或问题。"
-            "\n\n规则：先判断是否 out_of_scope；多意图时选最可能的一个；"
+            + "\n- out_of_scope：与点餐/购物/售后/营销/闲聊都不相关的其他问题。"
+            "\n\n规则：纯问候/自我介绍/道谢/告别一律选 chitchat，不要选 out_of_scope；"
+            "多意图时选最可能的一个；"
             "严格输出 JSON：{\"intent\": \"意图键名\", \"confidence\": 0到1的小数, \"reason\": \"一句话理由\"}。"
         )
         return [
@@ -336,6 +348,9 @@ class IndustrialIntentClassifier:
         except (TypeError, ValueError):
             confidence = 0.0
         reason = str(data.get("reason", ""))[:200]
+        # chitchat（问候/道谢/道别）不应被低置信度阈值卡掉
+        if intent == "chitchat":
+            return intent, max(confidence, 0.7), reason
         if intent == "out_of_scope":
             return intent, max(confidence, 0.6), reason
         if confidence < LLM_CONFIDENCE_THRESHOLD:
@@ -354,12 +369,12 @@ class IndustrialIntentClassifier:
         """
         message = (message or "").strip()
         if not message:
-            return {"intent": "out_of_scope", "confidence": 0.0, "method": "empty", "scores": {}, "reason": "空消息"}
+            return {"intent": "chitchat", "confidence": 0.5, "method": "empty", "scores": {}, "reason": "空消息走闲聊"}
 
         if role == "merchant":
             return {"intent": "marketing", "confidence": 1.0, "method": "role_based", "scores": {}, "reason": "商家角色直接路由到营销"}
 
-        # 第 1 层：规则快路（学 Rasa Rule Policy，强动作词直接命中）
+        # 第 1 层：规则快路（学 Rasa Rule Policy，强动作词直接命中，优先级最高）
         rule_intent = rule_fast_path(message)
         if rule_intent:
             return {
@@ -375,6 +390,10 @@ class IndustrialIntentClassifier:
         if fast:
             intent, conf = fast
             return {"intent": intent, "confidence": conf, "method": "keyword", "scores": {}, "reason": "关键词快路"}
+
+        # 闲聊快路（纯问候/短消息/标点；必须在规则/关键词之后，避免误伤业务意图）
+        if len(message) <= 4 or message in ("?", "？？", "啥", "什么"):
+            return {"intent": "chitchat", "confidence": 0.9, "method": "chitchat_fast_path", "scores": {}, "reason": "短消息/问候走闲聊快路"}
 
         # 第 3 层：Embedding + 稀疏特征混合打分（学 Rasa CountVectors）
         dense_scores: Dict[str, float] = {}

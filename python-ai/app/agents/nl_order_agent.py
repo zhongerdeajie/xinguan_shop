@@ -242,6 +242,10 @@ class NLOrderAgent(BaseAgent):
 
     def _extract_dishes_from_history(self, history: List[Dict[str, str]], selection: int) -> List[Dict[str, Any]]:
         """从历史消息中提取上一轮推荐的第 N 个方案的菜品列表"""
+        # 支持两种推荐格式：
+        #   A. "**方案 1** ... - 菜名 - 价格 元"
+        #   B. "1. ⭐ **拍黄瓜** - 12 元 - 评分..."（recommend agent 输出）
+        dish_row = r'(?:-\s*|\d+\.\s*(?:⭐|⚡)?\s*(?:\*\*)?)(.+?)(?:\*\*)?\s*-\s*([\d.]+)\s*元'
         for item in reversed(history):
             if item.get("role") != "assistant":
                 continue
@@ -250,13 +254,13 @@ class NLOrderAgent(BaseAgent):
             plans = re.split(r'\*\*方案\s*[\d一二三四五六]\*\*', content)
             if len(plans) > selection:
                 plan_text = plans[selection]  # selection 是 1-based
-                # 提取菜品行：- 菜名 - 价格 元
-                dish_lines = re.findall(r'-\s*(.+?)\s*-\s*([\d.]+)\s*元', plan_text)
+                # 提取菜品行：- 菜名 - 价格 元 或 1. ⭐ **菜名** - 价格 元
+                dish_lines = re.findall(dish_row, plan_text)
                 if dish_lines:
                     return [{"name": name.strip(), "price": float(price)} for name, price in dish_lines]
             # 也尝试匹配不带方案编号的菜品列表
             if selection == 1:
-                dish_lines = re.findall(r'-\s*(.+?)\s*-\s*([\d.]+)\s*元', content)
+                dish_lines = re.findall(dish_row, content)
                 if dish_lines:
                     return [{"name": name.strip(), "price": float(price)} for name, price in dish_lines]
         return []

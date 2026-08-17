@@ -24,7 +24,8 @@ INTENT_KEYWORDS = {
     ],
     "smart_bargain": [
         "怎么买最划算", "凑单", "凑满", "搭配",
-        "便宜点", "省钱", "凑齐", "差多少", "怎么凑", "凑到"
+        "便宜点", "省钱", "凑齐", "差多少", "怎么凑", "凑到",
+        "预算", "满减", "满100", "满50", "凑一凑",
     ],
     "price_compare": [
         "比价", "哪里便宜", "多少钱", "贵不贵", "价格曲线",
@@ -40,9 +41,18 @@ INTENT_KEYWORDS = {
     ],
     "recommend": [
         "推荐", "什么好", "买什么", "推荐一下",
-        "帮我选", "哪款好", "热门", "有什么"
+        "帮我选", "哪款好", "热门", "有什么",
+        "推荐几个", "好吃", "必点", "招牌菜", "下饭",
     ]
 }
+
+
+# 闲聊/问候/情绪 关键词 - 不属于任何业务意图，走友好回复
+CHITCHAT_KEYWORDS = [
+    "你好", "您好", "hi", "hello", "嗨", "哈喽", "在吗", "在不在",
+    "你是谁", "你叫什么", "介绍一下你", "你是啥", "什么玩意", "啥玩意",
+    "谢谢", "感谢", "不客气", "再见", "拜拜", "辛苦", "好的", "嗯",
+]
 
 
 def classify_intent(message: str, role: str = "user") -> str:
@@ -50,17 +60,26 @@ def classify_intent(message: str, role: str = "user") -> str:
     if role == "merchant":
         return "marketing"
 
+    msg = (message or "").strip()
+    if not msg:
+        return "chitchat"
+
+    # 闲聊/问候优先（长度很短或命中闲聊词，不应进入业务意图）
+    if len(msg) <= 3 or any(kw in msg for kw in CHITCHAT_KEYWORDS):
+        return "chitchat"
+
     scores: Dict[str, int] = {}
     for intent, keywords in INTENT_KEYWORDS.items():
         score = 0
         for kw in keywords:
-            if kw in message:
+            if kw in msg:
                 # 长关键词权重更高（长度 × 2）
                 score += len(kw) * 2
         scores[intent] = score
 
     if not scores or max(scores.values()) == 0:
-        return "recommend"
+        # 无匹配：不再默认 recommend（这是"你好变推荐"的根因）
+        return "out_of_scope"
 
     return max(scores, key=lambda k: scores[k])
 
@@ -187,10 +206,21 @@ class Orchestrator:
         # P0-1 上下文感知：确认词 + 历史上下文 → 路由到对应 Agent
         # 精确匹配：先检查 aftersales 上下文（退款/取消订单），再检查 nl_order 上下文（方案/菜品）
         _confirm_words = ["确认", "下单", "好的", "可以", "确定", "就这个", "选方案", "就要"]
+        # 指代/选择词：选第X个 / 就第X个 / 第一个 / 它叫什么 / 再加一份（需结合历史上下文）
+        _selection_words = [
+            "选第", "选第一个", "选第二个", "选第三个", "选第四个",
+            "就第", "就第一个", "就第二个", "就第三个",
+            "第一个", "第二个", "第三个", "第四个",
+            "选方案", "方案1", "方案2", "方案3", "方案一", "方案二", "方案三",
+            "它叫", "这个叫什么", "那个叫什么", "再加", "加一份", "加个", "补一份",
+        ]
         _aftersales_confirm_words = ["确认退款", "确认取消", "确定退款", "确定取消", "同意退款"]
         _is_aftersales_confirm = any(w in message for w in _aftersales_confirm_words)
         _is_general_confirm = any(w in message for w in _confirm_words)
-        if (_is_aftersales_confirm or _is_general_confirm) and session_id:
+        _is_selection = any(w in message for w in _selection_words)
+        if (_is_aftersales_confirm or _is_general_confirm or _is_selection) and session_id:
+            # 上下文感知分支：尝试读 Redis 历史
+            _intent_from_ctx = None
             try:
                 from app.agents.base import get_redis
                 import json as _json
@@ -198,34 +228,44 @@ class Orchestrator:
                 _recent = [_json.loads(r) for r in _raw]
                 _assistant_msgs = [item.get("content", "") for item in _recent if item.get("role") == "assistant"]
                 _all_ctx = " ".join(_assistant_msgs)
-                # 优先检测 aftersales 上下文（退款/取消订单/售后）
                 _has_aftersales_ctx = any(kw in _all_ctx for kw in ["退款", "取消订单", "售后", "退货", "投诉"])
-                # 再检测 nl_order 上下文（方案/菜品/下单/确认下单）
-                _has_order_ctx = any(kw in _all_ctx for kw in ["方案", "菜品", "确认下单", "加入购物车", "合计"])
-                if _is_aftersales_confirm and _has_aftersales_ctx:
-                    intent = "aftersales"
-                    intent_conf = 0.9
-                    intent_method = "context_aware"
+                _has_order_ctx = any(kw in _all_ctx for kw in ["方案", "菜品", "确认下单", "加入购物车", "合计", "推荐", "元", "评分"])
+                if _is_selection and not _has_aftersales_ctx:
+                    _intent_from_ctx = ("nl_order", 0.9)
+                elif _is_aftersales_confirm and _has_aftersales_ctx:
+                    _intent_from_ctx = ("aftersales", 0.9)
                 elif _has_order_ctx and not _has_aftersales_ctx:
-                    intent = "nl_order"
-                    intent_conf = 0.9
-                    intent_method = "context_aware"
+                    _intent_from_ctx = ("nl_order", 0.9)
                 elif _has_aftersales_ctx:
-                    # 即使是通用确认词，如果上下文是售后也路由到 aftersales
-                    intent = "aftersales"
-                    intent_conf = 0.9
-                    intent_method = "context_aware"
-                else:
-                    raise Exception("no matching context")
+                    _intent_from_ctx = ("aftersales", 0.9)
             except Exception:
-                try:
-                    from app.core.intent_classifier import get_intent_classifier
-                    intent_result = await get_intent_classifier().classify(message, role)
-                    intent = intent_result["intent"]
-                    intent_conf = intent_result["confidence"]
-                    intent_method = intent_result["method"]
-                except Exception:
-                    intent = classify_intent(message, role)
+                pass
+
+            if _intent_from_ctx is not None:
+                intent, intent_conf = _intent_from_ctx
+                intent_method = "context_aware"
+            else:
+                # Redis 读不到历史 或 历史不匹配：
+                # - 指代/确认词必须路由到对应 Agent，不能降级到 classifier（classifier 会判 OOS/chitchat，丢失上下文）
+                # - 让 Agent 内部处理"历史为空"的情况
+                if _is_aftersales_confirm:
+                    intent = "aftersales"
+                    intent_conf = 0.85
+                    intent_method = "context_aware_fallback"
+                elif _is_selection:
+                    intent = "nl_order"
+                    intent_conf = 0.85
+                    intent_method = "context_aware_fallback"
+                else:
+                    # _is_general_confirm: 历史不匹配时，退回给 classifier（可能是真的没上下文）
+                    try:
+                        from app.core.intent_classifier import get_intent_classifier
+                        intent_result = await get_intent_classifier().classify(message, role)
+                        intent = intent_result["intent"]
+                        intent_conf = intent_result["confidence"]
+                        intent_method = intent_result["method"]
+                    except Exception:
+                        intent = classify_intent(message, role)
         else:
             try:
                 from app.core.intent_classifier import get_intent_classifier
@@ -237,13 +277,27 @@ class Orchestrator:
                 # 任何 API 故障都降级到关键词识别，保证聊天不中断
                 intent = classify_intent(message, role)
 
-        # OOS：不路由到任何 Agent，走 Fallback 兜底（学 Rasa Fallback Policy）
-        if intent == "out_of_scope":
+        # OOS / 闲聊：不路由到任何 Agent，走 Fallback 兜底（学 Rasa Fallback Policy）
+        if intent in ("out_of_scope", "chitchat"):
+            # 闲聊友好回复（你好/你是谁/谢谢/再见 等）
+            if intent == "chitchat":
+                chitchat_reply = self._build_chitchat_reply(message)
+                return {
+                    "intent": "chitchat",
+                    "agent": "chitchat",
+                    "response": chitchat_reply,
+                    "entities": extract_entities(message),
+                    "tools_used": [],
+                    "order_suggestion": None,
+                    "error": False,
+                    "intent_confidence": intent_conf,
+                    "intent_method": intent_method,
+                }
             return {
                 "intent": "out_of_scope",
                 "agent": "fallback",
                 "response": (
-                    "我不太确定您想做什么。您可以试试：\n"
+                    "抱歉，我好像没太理解您的意思。您可以试试：\n"
                     "• 说『我要下单』+ 菜名 来点餐\n"
                     "• 说『预算XX元帮我凑单』来凑单\n"
                     "• 说『推荐几个菜』来获取推荐"
@@ -263,12 +317,37 @@ class Orchestrator:
 
         # Step 3: 调用 Agent（异步）
         agent = self.agents[intent]
+        # 把 Redis 里的历史传给 Agent，用于指代消解（选第X个/它叫什么/再加一份）
+        _history_for_agent: List[Dict[str, str]] = []
+        if session_id:
+            try:
+                from app.agents.base import get_redis
+                import json as _json2
+                _raw_h = get_redis().lrange(f"chat:history:{session_id}", 0, 9)
+                for r in _raw_h:
+                    _item = _json2.loads(r)
+                    _history_for_agent.append({
+                        "role": _item.get("role", "assistant"),
+                        "content": _item.get("content", ""),
+                    })
+            except Exception:
+                pass
+
         try:
             result = await agent.run(
                 message=message,
                 user_id=user_id,
                 session_id=session_id or "default",
-                entities=entities
+                entities=entities,
+                history=_history_for_agent,
+            )
+        except TypeError:
+            # Agent 旧签名不支持 history 参数（向后兼容）
+            result = await agent.run(
+                message=message,
+                user_id=user_id,
+                session_id=session_id or "default",
+                entities=entities,
             )
         except Exception as e:
             result = {
@@ -287,6 +366,39 @@ class Orchestrator:
             "intent_confidence": intent_conf,
             "intent_method": intent_method,
         }
+
+    @staticmethod
+    def _build_chitchat_reply(message: str) -> str:
+        """闲聊友好回复：你好/你是谁/谢谢/再见 等"""
+        msg = (message or "").strip().lower()
+        if any(kw in msg for kw in ["你好", "您好", "hi", "hello", "嗨", "哈喽", "在吗", "在不在"]):
+            return (
+                "你好！我是星选 AI 点餐助手 🤖\n"
+                "可以帮你：\n"
+                "• 🍽️ 推荐菜品（说『推荐几个菜』）\n"
+                "• 🛒 自然语言下单（说『我要下单 辣椒炒肉』）\n"
+                "• 💰 预算凑单（说『预算50元帮我凑单』）\n"
+                "• 🔍 价格比价（说『辣椒炒肉贵不贵』）\n"
+                "试试上面的说法吧！"
+            )
+        if any(kw in msg for kw in ["你是谁", "你叫什么", "介绍一下", "你是啥", "介绍下自己"]):
+            return (
+                "我是星选 AI 点餐助手 🤖\n"
+                "基于智谱 GLM 大模型，我可以帮你：\n"
+                "• 推荐评分最高的菜品\n"
+                "• 用自然语言下单\n"
+                "• 按预算智能凑单\n"
+                "• 查询菜品历史价格\n"
+                "有什么想吃的吗？"
+            )
+        if any(kw in msg for kw in ["谢谢", "感谢", "辛苦", "不客气"]):
+            return "不客气！有需要随时找我 😊"
+        if any(kw in msg for kw in ["再见", "拜拜", "88"]):
+            return "再见！欢迎下次再来点餐 🥡"
+        return (
+            "我在的！您可以直接告诉我你想吃什么、预算多少，"
+            "我会帮你推荐、凑单和比价。"
+        )
 
     def _load_agent(self, intent: str):
         """延迟加载 Agent 实例"""
