@@ -111,9 +111,9 @@ class LangChainRAG:
         return context
 
     async def query(self, question: str) -> str:
-        """RAG 问答"""
+        """RAG 问答（非流式，向后兼容）"""
         cache_key = self._get_cache_key("query", question)
-        
+
         if self.redis_cache:
             try:
                 cached = await self.redis_cache.get(cache_key)
@@ -135,6 +135,64 @@ class LangChainRAG:
                 logger.warning(f"Redis cache write error: {e}")
 
         return result
+
+    async def query_stream(self, question: str):
+        """RAG 检索 + LLM 真流式生成（逐 token 推送）
+
+        返回 AsyncGenerator[str]，每次 yield 一个 token 片段（chunk）。
+        前端用 SSE 接收，配合 fetch + ReadableStream 即可看到真打字机效果。
+
+        注意：retrieve() 阶段同步阻塞（检索必须完成才能喂 prompt 给 LLM），
+        LLM 阶段用 self.llm.astream() 真正逐 token 流。
+        """
+        cache_key = self._get_cache_key("query", question)
+
+        # 缓存命中 → 切片模拟流（保证协议一致）
+        if self.redis_cache:
+            try:
+                cached = await self.redis_cache.get(cache_key)
+                if cached:
+                    import asyncio as _aio
+                    for ch in cached:
+                        yield ch
+                        await _aio.sleep(0.02)
+                    return
+            except Exception as e:
+                logger.warning(f"Redis cache read error: {e}")
+
+        # RAG 检索（必须先做，不能流）
+        context = await self._retrieve(question)
+
+        # 拼 prompt
+        prompt_msgs = self.prompt.format_messages(context=context, question=question)
+
+        # LLM 真流：直接调 self.llm.astream()（LangChain ChatOpenAI 原生支持 stream）
+        accumulated = ""
+        try:
+            async for chunk in self.llm.astream(prompt_msgs):
+                # chunk 是 AIMessageChunk，content 是增量文本
+                delta = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                if delta:
+                    accumulated += delta
+                    yield delta
+        except Exception as e:
+            logger.error(f"LLM stream error: {e}", exc_info=True)
+            # 流失败时回退到非流
+            try:
+                response = self.llm.invoke(prompt_msgs)
+                accumulated = response.content
+                yield accumulated
+            except Exception as e2:
+                logger.error(f"LLM fallback also failed: {e2}")
+                yield "抱歉,服务暂时不可用。"
+                return
+
+        # 流结束后写缓存
+        if self.redis_cache and accumulated:
+            try:
+                await self.redis_cache.set(cache_key, accumulated, ttl=3600)
+            except Exception as e:
+                logger.warning(f"Redis cache write error: {e}")
 
     async def search(self, query: str, top_k: int = 5, entity_type: str = None) -> List[Dict]:
         """检索 + BGE 重排序"""

@@ -1,5 +1,6 @@
 """API 路由 - 星选 AI 购物管家"""
 import json
+import logging
 import re
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -14,6 +15,7 @@ from app.core.limiter import limiter
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def mask_pii(text: str) -> str:
@@ -179,52 +181,98 @@ async def chat(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(
 @router.post("/chat/stream")
 @limiter.limit("10/minute")
 async def chat_stream(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
-    """AI 对话 - Server-Sent Events 流式响应
+    """AI 对话 - Server-Sent Events 流式响应（LLM 真流）
 
     事件格式（每行一条 data: {...}）：
-      1) data: {"type":"meta","intent":"...","agent":"...","entities":{...},"tools_used":[...],"order_suggestion":{...}}
+      1) data: {"type":"meta","intent":"...","agent":"...","entities":{...}}
       2) data: {"type":"chunk","delta":"你"}
       3) data: {"type":"chunk","delta":"好"}
-      ...（逐字推送,前端可实现打字机效果）
-      4) data: {"type":"done","full":"完整文本","intent_confidence":...}
+      ...（逐 token 推送,LLM 生成一个 token 就 yield 一次,真正流式）
+      N) data: {"type":"done","full":"完整文本","intent_confidence":...}
 
     实现策略：
-      - orchestrator 已返回完整 result,直接字符切片模拟流式输出
-      - 真 LLM token 流（TODO）：重构 agent.handle 返回 AsyncGenerator
-        当前字符切片已经满足"首字立即可见"的体感,前端打字机效果良好
+      - 优先走 rag.query_stream()：LangChain chain.astream() 拿到 LLM 真 token 流
+      - 如果 rag 不可用,降级到字符切片（原有方案,保证不挂）
     """
-    result = await _process_chat(request, body, rag)
-    full_text = result.get("response", "") or "抱歉,我现在有点忙,请稍后再试。"
+    auth = request.headers.get("authorization", "")
+    customer_token = auth[7:] if auth.startswith("Bearer ") else None
+    context_token = set_request_customer_token(customer_token)
+
+    # 先做意图识别（取 intent + agent + entities,response 字段忽略）
+    from app.agents.orchestrator import get_orchestrator
+    try:
+        orchestrator = get_orchestrator()
+        # 注意：这里调一次完整 route()，目的是拿到意图/实体；
+        # 返回的 response 字段会被丢弃，下面用 LLM 真流重新生成。
+        # 改造点（TODO）：把 intent_recognize 从 route() 拆出来，避免重复 LLM 调用
+        intent_result = await orchestrator.route(
+            message=body.message,
+            user_id=body.user_id or "anonymous",
+            role=body.role,
+            session_id=body.session_id,
+        )
+        intent = intent_result.get("intent", "chitchat")
+        agent_name = intent_result.get("agent", "chitchat")
+        entities = intent_result.get("entities", {})
+        intent_confidence = intent_result.get("intent_confidence", 0.0)
+        intent_method = intent_result.get("intent_method", "keyword")
+    except Exception as e:
+        logger.error(f"intent 识别失败: {e}", exc_info=True)
+        intent = "chitchat"
+        agent_name = "chitchat"
+        entities = {}
+        intent_confidence = 0.0
+        intent_method = "keyword"
 
     meta_payload = {
         "type": "meta",
-        "intent": result.get("intent"),
-        "agent": result.get("agent"),
-        "entities": result.get("entities", {}),
-        "tools_used": result.get("tools_used", []),
-        "order_suggestion": result.get("order_suggestion"),
-        "error": result.get("error", False),
-    }
-    done_payload = {
-        "type": "done",
-        "full": full_text,
-        "intent_confidence": result.get("intent_confidence", 0.0),
-        "intent_method": result.get("intent_method", "keyword"),
+        "intent": intent,
+        "agent": agent_name,
+        "entities": entities,
+        "tools_used": [],
+        "order_suggestion": None,
     }
 
     async def event_stream():
-        # 先发 meta,前端拿到 intent/agent 后可立即展示标签
+        nonlocal entities
+        # 1) 先发 meta
         yield f"data: {json.dumps(meta_payload, ensure_ascii=False)}\n\n"
-        # 逐字推送(每字一个 SSE chunk,每字之间 sleep 模拟"打字机")
-        # 30 字/秒 ~ 打字机效果,首字立即可见
-        import asyncio as _asyncio
-        for ch in full_text:
-            chunk_payload = {"type": "chunk", "delta": ch}
-            yield f"data: {json.dumps(chunk_payload, ensure_ascii=False)}\n\n"
-            await _asyncio.sleep(0.033)  # 30 字/秒
-        # 最后发 done
+
+        accumulated = ""
+        try:
+            # 2) 走 LLM 真流（LangChain chain.astream）
+            async for delta in rag.query_stream(body.message):
+                if not delta:
+                    continue
+                accumulated += delta
+                yield f"data: {json.dumps({'type':'chunk','delta':delta}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error(f"真流失败,降级到字符切片: {e}", exc_info=True)
+            # 降级：一次性 invoke 再切片
+            try:
+                full = await rag.query(body.message)
+                if not full:
+                    full = "抱歉,我现在有点忙,请稍后再试。"
+                accumulated = full
+                import asyncio as _aio
+                for ch in full:
+                    yield f"data: {json.dumps({'type':'chunk','delta':ch}, ensure_ascii=False)}\n\n"
+                    await _aio.sleep(0.033)
+            except Exception as e2:
+                logger.error(f"降级也失败: {e2}")
+                accumulated = "抱歉,服务暂时不可用。"
+                yield f"data: {json.dumps({'type':'chunk','delta':accumulated}, ensure_ascii=False)}\n\n"
+
+        # 3) 最后发 done
+        done_payload = {
+            "type": "done",
+            "full": accumulated,
+            "intent_confidence": intent_confidence,
+            "intent_method": intent_method,
+        }
         yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
+    reset_request_customer_token(context_token)
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
