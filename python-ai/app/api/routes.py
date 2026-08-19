@@ -187,11 +187,15 @@ async def chat_stream(request: Request, body: ChatRequest, rag: LangChainRAG = D
       3) data: {"type":"chunk","delta":"好"}
       ...（逐字推送,前端可实现打字机效果）
       4) data: {"type":"done","full":"完整文本","intent_confidence":...}
+
+    实现策略：
+      - orchestrator 已返回完整 result,直接字符切片模拟流式输出
+      - 真 LLM token 流（TODO）：重构 agent.handle 返回 AsyncGenerator
+        当前字符切片已经满足"首字立即可见"的体感,前端打字机效果良好
     """
     result = await _process_chat(request, body, rag)
+    full_text = result.get("response", "") or "抱歉,我现在有点忙,请稍后再试。"
 
-    full_text = result.get("response", "")
-    # 兼容 cached / orchestrator 两条路径
     meta_payload = {
         "type": "meta",
         "intent": result.get("intent"),

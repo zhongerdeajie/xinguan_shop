@@ -25,6 +25,7 @@ if (!JWT_SECRET || JWT_SECRET.length < 16) {
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  // 导出 JwtModule 让其他模块（如 OrdersGateway）能用 JwtService 验证 WebSocket 握手时的 token
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

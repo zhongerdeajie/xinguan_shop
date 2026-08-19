@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { ordersAPI } from '@/lib/api';
+import { useAdminOrdersWS } from '@/lib/useAdminOrdersWS';
 
 interface Order {
   id: number;
@@ -53,6 +54,33 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
+
+  // WebSocket：新订单实时推送
+  const handleNewOrder = useCallback((_order: { id: number; number: string; amount: number }) => {
+    // 浏览器原生提示音（短促 beep）
+    if (typeof window !== 'undefined') {
+      try {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.15);
+        }
+      } catch {
+        // 静默失败
+      }
+    }
+    // 重新拉列表 + 把页面翻回第一页,这样新订单立刻可见
+    setPage(1);
+    fetchOrders();
+  }, []);
+  useAdminOrdersWS({ onNewOrder: handleNewOrder });
 
   const handleStatusChange = async (orderId: number, newStatus: number) => {
     try {

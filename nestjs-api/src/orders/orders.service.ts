@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../common/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { OrdersGateway } from './orders.gateway';
 
 // 订单状态常量
 export const ORDER_STATUS = {
@@ -25,7 +26,10 @@ const STATUS_TRANSITIONS: Record<number, number[]> = {
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly gateway: OrdersGateway,
+  ) {}
 
   async findAll(
     page: number,
@@ -110,7 +114,7 @@ export class OrdersService {
   }) {
     const orderNumber = data.number || this.generateOrderNumber();
 
-    return this.prisma.orders.create({
+    const order = await this.prisma.orders.create({
       data: {
         ...data,
         number: orderNumber,
@@ -127,6 +131,25 @@ export class OrdersService {
         orderDetails: true,
       },
     });
+
+    // 实时通知所有管理员（WebSocket 推送）
+    // 用 setImmediate 避免阻塞请求返回,失败也不影响主流程
+    setImmediate(() => {
+      try {
+        this.gateway.broadcastNewOrder({
+          id: order.id,
+          number: order.number,
+          userId: order.userId,
+          amount: order.amount,
+          status: order.status,
+          createdAt: order.orderTime,
+        });
+      } catch (e) {
+        console.warn('[orders.gateway] broadcastNewOrder 失败:', (e as Error).message);
+      }
+    });
+
+    return order;
   }
 
   async update(id: number, data: any, operatorId?: number) {
