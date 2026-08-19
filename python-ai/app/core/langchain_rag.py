@@ -137,13 +137,20 @@ class LangChainRAG:
         return result
 
     async def query_stream(self, question: str):
-        """RAG 检索 + LLM 真流式生成（逐 token 推送）
+        """RAG 检索 + LLM 真流式生成（逐 token 推送，含节点事件）
 
-        返回 AsyncGenerator[str]，每次 yield 一个 token 片段（chunk）。
-        前端用 SSE 接收，配合 fetch + ReadableStream 即可看到真打字机效果。
+        返回 AsyncGenerator[dict]，每次 yield 一个事件：
+          {"type": "node", "node": "retrieve", "description": "检索菜品..."}
+          {"type": "node", "node": "llm", "description": "生成回答..."}
+          {"type": "chunk", "delta": "你"}
+          {"type": "chunk", "delta": "好"}
+          ...
+          {"type": "done", "full": "..."}
 
-        注意：retrieve() 阶段同步阻塞（检索必须完成才能喂 prompt 给 LLM），
-        LLM 阶段用 self.llm.astream() 真正逐 token 流。
+        这是 LangGraph astream(stream_mode="events") 的轻量替代：
+        - RAG 检索阶段推 node 事件
+        - LLM 真流阶段推 chunk 事件
+        前端用 SSE 接收，前端可显示"正在检索..."→"AI 正在思考..."→打字机效果
         """
         cache_key = self._get_cache_key("query", question)
 
@@ -152,16 +159,29 @@ class LangChainRAG:
             try:
                 cached = await self.redis_cache.get(cache_key)
                 if cached:
+                    yield {"type": "node", "node": "cache_hit", "description": "命中缓存"}
                     import asyncio as _aio
                     for ch in cached:
-                        yield ch
+                        yield {"type": "chunk", "delta": ch}
                         await _aio.sleep(0.02)
+                    yield {"type": "done", "full": cached}
                     return
             except Exception as e:
                 logger.warning(f"Redis cache read error: {e}")
 
+        # === 节点事件: 检索阶段 ===
+        yield {"type": "node", "node": "retrieve", "description": "正在检索菜品..."}
+
         # RAG 检索（必须先做，不能流）
-        context = await self._retrieve(question)
+        try:
+            context = await self._retrieve(question)
+        except Exception as e:
+            logger.error(f"RAG 检索失败: {e}", exc_info=True)
+            yield {"type": "node", "node": "retrieve_failed", "description": "检索失败,使用空 context"}
+            context = ""
+
+        # === 节点事件: LLM 阶段 ===
+        yield {"type": "node", "node": "llm", "description": "AI 正在生成回答..."}
 
         # 拼 prompt
         prompt_msgs = self.prompt.format_messages(context=context, question=question)
@@ -174,18 +194,24 @@ class LangChainRAG:
                 delta = chunk.content if hasattr(chunk, 'content') else str(chunk)
                 if delta:
                     accumulated += delta
-                    yield delta
+                    yield {"type": "chunk", "delta": delta}
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
             # 流失败时回退到非流
             try:
                 response = self.llm.invoke(prompt_msgs)
                 accumulated = response.content
-                yield accumulated
+                # 字符切片 fallback
+                import asyncio as _aio
+                for ch in accumulated:
+                    yield {"type": "chunk", "delta": ch}
+                    await _aio.sleep(0.033)
             except Exception as e2:
                 logger.error(f"LLM fallback also failed: {e2}")
-                yield "抱歉,服务暂时不可用。"
-                return
+                accumulated = "抱歉,服务暂时不可用。"
+                yield {"type": "chunk", "delta": accumulated}
+
+        yield {"type": "done", "full": accumulated}
 
         # 流结束后写缓存
         if self.redis_cache and accumulated:

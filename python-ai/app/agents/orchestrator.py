@@ -180,33 +180,33 @@ class Orchestrator:
     def __init__(self):
         self.agents: Dict[str, Any] = {}  # 延迟加载
 
-    async def route(self, message: str, user_id: str = "anonymous",
-              role: str = "user", session_id: Optional[str] = None) -> Dict[str, Any]:
-        """路由到对应 Agent
-
-        Args:
-            message: 用户输入
-            user_id: 用户 ID
-            role: user / merchant
-            session_id: 会话 ID（用于上下文）
+    async def intent_recognize(self, message: str, role: str = "user",
+                          session_id: Optional[str] = None) -> Dict[str, Any]:
+        """仅做意图识别（不调用 Agent，不调 LLM 生成回答）
 
         Returns:
             {
-                "intent": "nl_order",
-                "agent": "自然语言下单",
-                "response": "...",
+                "intent": "nl_order" | "aftersales" | "chitchat" | "out_of_scope" | ...,
+                "agent": "自然语言下单" | "售后" | "chitchat" | "fallback" | ...,
+                "intent_confidence": 0.0~1.0,
+                "intent_method": "keyword" | "embedding" | "llm" | "context_aware" | ...,
                 "entities": {...},
-                "tools_used": [...]
+                "early_response": "..." | None,  # chitchat/out_of_scope 直接给回答
             }
+
+        用法（生产级 LLM真流）：
+            intent_info = await orchestrator.intent_recognize(message, role, session_id)
+            if intent_info["early_response"]:
+                # chitchat / OOS 不需要走 LLM
+                yield intent_info["early_response"]
+                return
+            # 否则 intent = intent_info["intent"]，继续走 RAG + LLM真流
         """
-        # Step 1: 意图识别（工业级漏斗：关键词快路 → Embedding → LLM 兜底 → OOS）
         intent_conf = 0.0
         intent_method = "keyword"
 
         # P0-1 上下文感知：确认词 + 历史上下文 → 路由到对应 Agent
-        # 精确匹配：先检查 aftersales 上下文（退款/取消订单），再检查 nl_order 上下文（方案/菜品）
         _confirm_words = ["确认", "下单", "好的", "可以", "确定", "就这个", "选方案", "就要"]
-        # 指代/选择词：选第X个 / 就第X个 / 第一个 / 它叫什么 / 再加一份（需结合历史上下文）
         _selection_words = [
             "选第", "选第一个", "选第二个", "选第三个", "选第四个",
             "就第", "就第一个", "就第二个", "就第三个",
@@ -219,7 +219,6 @@ class Orchestrator:
         _is_general_confirm = any(w in message for w in _confirm_words)
         _is_selection = any(w in message for w in _selection_words)
         if (_is_aftersales_confirm or _is_general_confirm or _is_selection) and session_id:
-            # 上下文感知分支：尝试读 Redis 历史
             _intent_from_ctx = None
             try:
                 from app.agents.base import get_redis
@@ -245,9 +244,6 @@ class Orchestrator:
                 intent, intent_conf = _intent_from_ctx
                 intent_method = "context_aware"
             else:
-                # Redis 读不到历史 或 历史不匹配：
-                # - 指代/确认词必须路由到对应 Agent，不能降级到 classifier（classifier 会判 OOS/chitchat，丢失上下文）
-                # - 让 Agent 内部处理"历史为空"的情况
                 if _is_aftersales_confirm:
                     intent = "aftersales"
                     intent_conf = 0.85
@@ -257,7 +253,6 @@ class Orchestrator:
                     intent_conf = 0.85
                     intent_method = "context_aware_fallback"
                 else:
-                    # _is_general_confirm: 历史不匹配时，退回给 classifier（可能是真的没上下文）
                     try:
                         from app.core.intent_classifier import get_intent_classifier
                         intent_result = await get_intent_classifier().classify(message, role)
@@ -274,42 +269,68 @@ class Orchestrator:
                 intent_conf = intent_result["confidence"]
                 intent_method = intent_result["method"]
             except Exception:
-                # 任何 API 故障都降级到关键词识别，保证聊天不中断
                 intent = classify_intent(message, role)
 
-        # OOS / 闲聊：不路由到任何 Agent，走 Fallback 兜底（学 Rasa Fallback Policy）
+        # 实体抽取
+        entities = extract_entities(message)
+
+        # OOS / 闲聊：直接返回早响应，避免走 LLM（节省首字延迟）
         if intent in ("out_of_scope", "chitchat"):
-            # 闲聊友好回复（你好/你是谁/谢谢/再见 等）
             if intent == "chitchat":
-                chitchat_reply = self._build_chitchat_reply(message)
-                return {
-                    "intent": "chitchat",
-                    "agent": "chitchat",
-                    "response": chitchat_reply,
-                    "entities": extract_entities(message),
-                    "tools_used": [],
-                    "order_suggestion": None,
-                    "error": False,
-                    "intent_confidence": intent_conf,
-                    "intent_method": intent_method,
-                }
-            return {
-                "intent": "out_of_scope",
-                "agent": "fallback",
-                "response": (
+                early_response = self._build_chitchat_reply(message)
+            else:
+                early_response = (
                     "抱歉，我好像没太理解您的意思。您可以试试：\n"
                     "• 说『我要下单』+ 菜名 来点餐\n"
                     "• 说『预算XX元帮我凑单』来凑单\n"
                     "• 说『推荐几个菜』来获取推荐"
-                ),
-                "entities": extract_entities(message),
+                )
+            return {
+                "intent": intent,
+                "agent": "chitchat" if intent == "chitchat" else "fallback",
+                "intent_confidence": intent_conf,
+                "intent_method": intent_method,
+                "entities": entities,
+                "early_response": early_response,
+            }
+
+        return {
+            "intent": intent,
+            "agent": AGENT_REGISTRY.get(intent, {}).get("name", intent),
+            "intent_confidence": intent_conf,
+            "intent_method": intent_method,
+            "entities": entities,
+            "early_response": None,
+        }
+
+    async def route(self, message: str, user_id: str = "anonymous",
+              role: str = "user", session_id: Optional[str] = None) -> Dict[str, Any]:
+        """路由到对应 Agent（兼容旧调用：保留全部旧字段）
+
+        生产级 LLM真流场景下，应该用：
+            intent_info = await orchestrator.intent_recognize(...)
+            # 自行决定怎么走 RAG + LLM 流
+        而不是直接调 route()（route 内部 LLM 调一次 + 后面再调一次 LLM 真流 = 浪费）
+        """
+        intent_info = await self.intent_recognize(message, role, session_id)
+        intent = intent_info["intent"]
+        entities = intent_info["entities"]
+        intent_conf = intent_info["intent_confidence"]
+        intent_method = intent_info["intent_method"]
+
+        # OOS / 闲聊：直接返回（不走 Agent）
+        if intent_info["early_response"] is not None:
+            return {
+                "intent": intent,
+                "agent": intent_info["agent"],
+                "response": intent_info["early_response"],
+                "entities": entities,
                 "tools_used": [],
                 "order_suggestion": None,
                 "error": False,
                 "intent_confidence": intent_conf,
                 "intent_method": intent_method,
             }
-        entities = extract_entities(message)
 
         # Step 2: 加载 Agent（延迟加载）
         if intent not in self.agents:
@@ -358,7 +379,7 @@ class Orchestrator:
 
         return {
             "intent": intent,
-            "agent": AGENT_REGISTRY[intent]["name"],
+            "agent": AGENT_REGISTRY.get(intent, {}).get("name", intent),
             "response": result.get("response", ""),
             "entities": entities,
             "tools_used": result.get("tools_used", []),
