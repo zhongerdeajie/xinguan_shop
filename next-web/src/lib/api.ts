@@ -55,6 +55,10 @@ export const authAPI = {
     api.post('/auth/login', { username, password }),
   register: (data: any) => api.post('/auth/register', data),
   logout: () => api.post('/auth/logout'),
+  customerLogin: (phone: string, password: string) =>
+    api.post('/auth/customer/login', { phone, password }),
+  customerRegister: (data: { name: string; phone: string; password: string }) =>
+    api.post('/auth/customer/register', data),
 };
 
 // ==================== Orders API ====================
@@ -92,4 +96,44 @@ export const usersAPI = {
   create: (data: any) => api.post('/users', data),
   update: (id: number, data: any) => api.put(`/users/${id}`, data),
   remove: (id: number) => api.delete(`/users/${id}`),
+};
+
+// ==================== Employees API ====================
+export const employeesAPI = {
+  findAll: () => api.get('/employees?page=1&limit=100'),
+  findOne: (id: number) => api.get(`/employees/${id}`),
+  create: (data: any) => api.post('/employees', data),
+  update: (id: number, data: any) => api.put(`/employees/${id}`, data),
+  remove: (id: number) => api.delete(`/employees/${id}`),
+};
+
+// ==================== Setmeals API ====================
+export const setmealsAPI = {
+  findAll: () => api.get('/setmeals?page=1&limit=100'),
+  findOne: (id: number) => api.get(`/setmeals/${id}`),
+  create: (data: any) => api.post('/setmeals', data),
+  update: (id: number, data: any) => api.put(`/setmeals/${id}`, data),
+  remove: (id: number) => api.delete(`/setmeals/${id}`),
+};
+
+// ==================== Categories API ====================
+export const categoriesAPI = {
+  findAll: () => api.get('/categories?page=1&limit=100'),
+  findOne: (id: number) => api.get(`/categories/${id}`),
+  create: (data: any) => api.post('/categories', data),
+  update: (id: number, data: any) => api.put(`/categories/${id}`, data),
+  remove: (id: number) => api.delete(`/categories/${id}`),
+};
+
+// ==================== Marketing API ====================
+export const marketingAPI = {
+  findCoupons: () => api.get('/coupons'),
+  createCoupon: (data: { title: string; amount: number; threshold: number }) =>
+    api.post('/coupons', data),
+  removeCoupon: (id: number) => api.delete(`/coupons/${id}`),
+  generateCopy: (topic: string) =>
+    api.post('/ai/chat', {
+      message: `我是商家，帮我写一条「${topic}」的推广文案，要求：有吸引力、不超过 100 字、含活动引导。`,
+      sessionId: 'merchant-copy',
+    }),
 };

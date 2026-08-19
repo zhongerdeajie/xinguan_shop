@@ -1,102 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Header from '@/components/Header';
+import { useSetmealsQuery, useSetmealMutations, useCategoriesAdminQuery } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import { useToast } from '@/lib/use-toast';
+import type { Setmeal } from '@/types';
 
-interface Setmeal {
-  id: number;
+interface SetmealForm {
   name: string;
-  categoryId: number;
-  price: number | string;
-  description?: string;
+  categoryId: string;
+  price: string;
+  description: string;
   status: number;
-  category?: { name: string };
 }
 
-interface Category {
-  id: number;
-  name: string;
-}
+const empty: SetmealForm = { name: '', categoryId: '', price: '', description: '', status: 1 };
 
 export default function SetmealsPage() {
-  const router = useRouter();
-  const [list, setList] = useState<Setmeal[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
+  const { data: list = [], isLoading: loading } = useSetmealsQuery();
+  const { data: categories = [] } = useCategoriesAdminQuery();
+  const { create, update, remove } = useSetmealMutations();
+  const toast = useToast();
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Setmeal | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    categoryId: '',
-    price: '',
-    description: '',
-    status: 1,
-  });
+  const [form, setForm] = useState<SetmealForm>(empty);
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  async function load() {
-    try {
-      const [setmealRes, catRes] = await Promise.all([
-        fetch('/api/setmeals?page=1&limit=100', { headers: authHeaders() }),
-        fetch('/api/categories?page=1&limit=100', { headers: authHeaders() }),
-      ]);
-      const sm = await setmealRes.json();
-      const ct = await catRes.json();
-      setList(sm.data || []);
-      setCategories(ct.data || []);
-    } finally {
-      setLoading(false);
-    }
+  function openCreate() {
+    setEditing(null);
+    setForm(empty);
+    setShowModal(true);
   }
-
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    load();
-  }, []);
-
+  function openEdit(s: Setmeal) {
+    setEditing(s);
+    setForm({
+      name: s.name,
+      categoryId: String(s.categoryId),
+      price: String(s.price),
+      description: s.description || '',
+      status: s.status,
+    });
+    setShowModal(true);
+  }
   async function save() {
-    const body = JSON.stringify({
+    const body = {
       name: form.name,
       categoryId: Number(form.categoryId),
       price: Number(form.price),
       description: form.description,
       status: form.status,
-    });
-    const headers = { ...authHeaders(), 'Content-Type': 'application/json' };
-    const res = editing
-      ? await fetch(`/api/setmeals/${editing.id}`, { method: 'PUT', headers, body })
-      : await fetch('/api/setmeals', { method: 'POST', headers, body });
-    if (res.ok) {
+    };
+    try {
+      if (editing) await update.mutateAsync({ id: editing.id, body });
+      else await create.mutateAsync(body);
       setShowModal(false);
       setEditing(null);
-      setForm({ name: '', categoryId: '', price: '', description: '', status: 1 });
-      load();
-    } else {
-      alert('保存失败');
+      toast.show('已保存');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '保存失败');
     }
   }
-
-  async function remove(id: number) {
+  async function onRemove(id: number) {
     if (!confirm('确定删除这个套餐吗？')) return;
-    const res = await fetch(`/api/setmeals/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) load();
+    try {
+      await remove.mutateAsync(id);
+      toast.show('已删除');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '删除失败');
+    }
   }
-
-  async function toggleStatus(s: Setmeal) {
-    const res = await fetch(`/api/setmeals/${s.id}`, {
-      method: 'PUT',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: s.status === 1 ? 0 : 1 }),
-    });
-    if (res.ok) load();
+  async function onToggle(s: Setmeal) {
+    try {
+      await update.mutateAsync({ id: s.id, body: { status: s.status === 1 ? 0 : 1 } });
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '更新失败');
+    }
   }
 
   return (
@@ -105,16 +85,7 @@ export default function SetmealsPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="atitle">套餐管理</h1>
-          <button
-            onClick={() => {
-              setEditing(null);
-              setForm({ name: '', categoryId: '', price: '', description: '', status: 1 });
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            + 新增套餐
-          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">+ 新增套餐</button>
         </div>
         <div className="apanel overflow-x-auto">
           <table className="w-full text-sm">
@@ -139,7 +110,8 @@ export default function SetmealsPage() {
                   <td className="px-4 py-3 max-w-[200px] truncate">{s.description || '-'}</td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => toggleStatus(s)}
+                      onClick={() => onToggle(s)}
+                      disabled={update.isPending}
                       className={`px-2 py-1 rounded-full text-xs ${
                         s.status === 1 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
                       }`}
@@ -148,25 +120,8 @@ export default function SetmealsPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    <button
-                      onClick={() => {
-                        setEditing(s);
-                        setForm({
-                          name: s.name,
-                          categoryId: String(s.categoryId),
-                          price: String(s.price),
-                          description: s.description || '',
-                          status: s.status,
-                        });
-                        setShowModal(true);
-                      }}
-                      className="text-primary-600 hover:underline"
-                    >
-                      编辑
-                    </button>
-                    <button onClick={() => remove(s.id)} className="text-red-500 hover:underline">
-                      删除
-                    </button>
+                    <button onClick={() => openEdit(s)} className="text-primary-600 hover:underline">编辑</button>
+                    <button onClick={() => onRemove(s.id)} disabled={remove.isPending} className="text-red-500 hover:underline">删除</button>
                   </td>
                 </tr>
               ))}
@@ -196,9 +151,7 @@ export default function SetmealsPage() {
               >
                 <option value="">选择分类</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
               <input
@@ -217,15 +170,8 @@ export default function SetmealsPage() {
               />
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">
-                取消
-              </button>
-              <button
-                onClick={save}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
-                保存
-              </button>
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">取消</button>
+              <button onClick={save} disabled={create.isPending || update.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">保存</button>
             </div>
           </div>
         </div>

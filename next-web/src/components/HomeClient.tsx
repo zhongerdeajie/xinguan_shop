@@ -3,16 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { addToLocalCart, getLocalCartCount } from '@/lib/cart-storage';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DishCard } from '@/components/DishCard';
-import type { Dish as DishCardData } from '@/components/DishCard';
-
-type Dish = DishCardData;
-
-export interface Category {
-  id: number;
-  name: string;
-}
+import type { Category, Dish } from '@/types';
+import { useAuthStore, useCartStore } from '@/lib/stores';
+import { useToast } from '@/lib/use-toast';
+import api from '@/lib/api';
 
 interface HomeClientProps {
   initialDishes: Dish[];
@@ -22,7 +18,6 @@ interface HomeClientProps {
 const T = {
   zh: {
     brand: '星选 AI 购物管家',
-    eyebrow: 'AI Shopping Companion',
     tagline: '想吃点什么？跟 AI 说就行',
     sub: '智能推荐 · 自然语言下单 · 凑单比价 · 真实评价数据',
     cta: '🤖 开始 AI 点餐',
@@ -35,7 +30,6 @@ const T = {
   },
   en: {
     brand: 'StarSelect AI Shopping',
-    eyebrow: 'AI Shopping Companion',
     tagline: 'What do you want to eat?',
     sub: 'AI Recommend · Order by Chat · Bargain · Real Reviews',
     cta: '🤖 Start AI Ordering',
@@ -48,207 +42,129 @@ const T = {
   },
 };
 
+interface Coupon {
+  id: number;
+  title: string;
+  amount: number | string;
+  threshold: number | string;
+}
+
+interface BargainResult {
+  total: number;
+  items: { dishId: number; name: string; price: number }[];
+}
+
 export default function HomeClient({ initialDishes, initialCategories }: HomeClientProps) {
   const router = useRouter();
-  // 首屏数据来自服务端组件,客户端只维护交互态
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const customerToken = useAuthStore((s) => s.customerToken);
+  const isLoggedIn = !!customerToken;
+  const guestAdd = useCartStore((s) => s.add);
+  const guestCount = useCartStore((s) => s.items.reduce((sum, i) => sum + i.number, 0));
+
+  // 来自 SSR 的首屏数据,客户端只把它当成"初始值"
   const [dishes] = useState<Dish[]>(initialDishes);
   const [categories] = useState<Category[]>(initialCategories);
+
+  // 纯交互状态
   const [activeCategory, setActiveCategory] = useState<number | 'all'>('all');
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [toast, setToast] = useState('');
-  const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [budget, setBudget] = useState('');
-  const [cartCount, setCartCount] = useState(0);  // 未登录暂存购物车的总件数,登录后由 /cart 页拉服务端
-  const [bargainRes, setBargainRes] = useState<{
-    total: number;
-    items: { dishId: number; name: string; price: number }[];
-  } | null>(null);
-  const [bargainLoading, setBargainLoading] = useState(false);
   const [priceHistory, setPriceHistory] = useState<{ timestamp: number; price: number }[]>([]);
-  const [availableCoupons, setAvailableCoupons] = useState<
-    { id: number; title: string; amount: number | string; threshold: number | string }[]
-  >([]);
-  const [claimedIds, setClaimedIds] = useState<number[]>([]);
 
-  const i18n = T[lang];
-
+  // 国际化
+  const [lang, setLang] = useState<'zh' | 'en'>('zh');
   useEffect(() => {
-    // 每次回到页面（含浏览器返回缓存/切回标签页）都重新检查登录状态
-    const checkLogin = () => setIsLoggedIn(!!localStorage.getItem('customerToken'));
-    checkLogin();
-    window.addEventListener('storage', checkLogin);
-    window.addEventListener('focus', checkLogin);
-    window.addEventListener('pageshow', checkLogin);
     const saved = localStorage.getItem('lang');
     if (saved === 'en' || saved === 'zh') setLang(saved);
-    if (localStorage.getItem('customerToken')) {
-      loadCoupons();
-    }
-    setCartCount(getLocalCartCount());
-    return () => {
-      window.removeEventListener('storage', checkLogin);
-      window.removeEventListener('focus', checkLogin);
-      window.removeEventListener('pageshow', checkLogin);
-    };
   }, []);
+  const i18n = T[lang];
 
-  async function loadCoupons() {
-    const token = localStorage.getItem('customerToken');
-    if (!token) return;
-    const headers = { Authorization: `Bearer ${token}` };
-    try {
+  // 优惠券中心(已登录才需要)
+  const couponCenter = useQuery({
+    queryKey: ['coupons', 'center', customerToken],
+    enabled: isLoggedIn,
+    queryFn: async () => {
       const [availRes, mineRes] = await Promise.all([
-        fetch('/api/customer/coupons/available', { headers }),
-        fetch('/api/customer/coupons', { headers }),
+        api.get('/customer/coupons/available'),
+        api.get('/customer/coupons'),
       ]);
-      const avail = await availRes.json();
-      const mine = await mineRes.json();
-      setAvailableCoupons(Array.isArray(avail) ? avail : []);
-      setClaimedIds((mine || []).map((m: any) => m.couponId));
-    } catch {}
-  }
+      return {
+        available: Array.isArray(availRes.data) ? availRes.data : [],
+        claimedIds: ((mineRes.data as any[]) || []).map((m) => m.couponId),
+      } as { available: Coupon[]; claimedIds: number[] };
+    },
+  });
+  const availableCoupons = couponCenter.data?.available || [];
+  const claimedIds = couponCenter.data?.claimedIds || [];
 
-  async function claimCoupon(couponId: number) {
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      router.push('/account/login');
-      return;
-    }
-    try {
-      const res = await fetch('/api/customer/coupons/claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ couponId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || '领取失败');
-      setToast('领取成功！去购物车结算时可用');
-      setTimeout(() => setToast(''), 2500);
-      loadCoupons();
-    } catch (e: any) {
-      setToast(e.message || '领取失败');
-      setTimeout(() => setToast(''), 2500);
-    }
-  }
-
-  const filtered =
-    activeCategory === 'all'
-      ? dishes
-      : dishes.filter((d) => d.categoryId === activeCategory);
-
-  function openDish(dish: Dish) {
-    setSelectedDish(dish);
-    setPriceHistory([]);
-    const token = localStorage.getItem('customerToken');
-    if (token) {
-      fetch('/api/customer/history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ dishId: dish.id }),
-      }).catch(() => {});
-      fetch(`/go/dishes/${dish.id}/price-history`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((d) => setPriceHistory(d?.data || []))
-        .catch(() => {});
-    }
-  }
-
-  async function addToCart(dish: Dish) {
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      // 未登录:不强制跳登录页,改存 localStorage,登录后自动合并
-      addToLocalCart({
-        dishId: dish.id,
-        number: 1,
-        name: dish.name,
-        price: Number(dish.price),
-        image: dish.image,
-      });
-      setCartCount(getLocalCartCount());
-      setToast(`「${dish.name}」已暂存，登录后自动加入购物车`);
-      setTimeout(() => setToast(''), 2000);
-      return;
-    }
-    try {
-      const res = await fetch('/go/cart/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ dishId: dish.id, number: 1 }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || err.message || '添加失败');
-      }
-      setToast(`「${dish.name}」已加入购物车`);
-      setTimeout(() => setToast(''), 2000);
-    } catch (e: any) {
-      setToast(e.message || '添加失败，请重试');
-      setTimeout(() => setToast(''), 2500);
-    }
-  }
-
-  async function bargain() {
-    const b = Number(budget);
-    if (!b || b <= 0) return;
-    setBargainLoading(true);
-    try {
+  // 凑单
+  const bargain = useMutation({
+    mutationFn: async (val: number) => {
       const res = await fetch('/api/ai/bargain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget: b }),
+        body: JSON.stringify({ budget: val }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || '凑单失败');
-      setBargainRes(data);
-    } catch (e: any) {
-      setToast(e.message || '凑单失败');
-      setTimeout(() => setToast(''), 2500);
-    } finally {
-      setBargainLoading(false);
+      return data as BargainResult;
+    },
+    onError: (e: any) => toast.show(e?.message || '凑单失败'),
+  });
+  const bargainRes = bargain.data || null;
+
+  // 加车 mutation(已登录走接口;未登录直接写 store)
+  const serverAdd = useMutation({
+    mutationFn: (dish: Dish) =>
+      api.post('/go/cart/add', { dishId: dish.id, number: 1 }),
+    onSuccess: (_d, dish) => {
+      queryClient.invalidateQueries({ queryKey: ['customer', 'cart'] });
+      toast.show(`「${dish.name}」已加入购物车`);
+    },
+    onError: (e: any) => toast.show(e?.response?.data?.error || '添加失败，请重试'),
+  });
+
+  async function addToCart(dish: Dish) {
+    if (!customerToken) {
+      guestAdd({ dishId: dish.id, number: 1, name: dish.name, price: Number(dish.price), image: dish.image });
+      toast.show(`「${dish.name}」已暂存，登录后自动加入购物车`);
+      return;
     }
+    serverAdd.mutate(dish);
   }
 
   async function addBargainToCart() {
     if (!bargainRes) return;
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      // 未登录:每个菜都暂存 localStorage
+    if (!customerToken) {
       for (const item of bargainRes.items) {
-        addToLocalCart({
-          dishId: item.dishId,
-          number: 1,
-          name: item.name,
-          price: item.price,
-        });
+        guestAdd({ dishId: item.dishId, number: 1, name: item.name, price: item.price });
       }
-      setCartCount(getLocalCartCount());
-      setToast('已暂存，登录后自动加入购物车');
-      setTimeout(() => setToast(''), 2000);
+      toast.show('已暂存，登录后自动加入购物车');
       return;
     }
     for (const item of bargainRes.items) {
-      await fetch('/go/cart/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ dishId: item.dishId, number: 1 }),
-      }).catch(() => {});
+      await api.post('/go/cart/add', { dishId: item.dishId, number: 1 }).catch(() => undefined);
     }
-    setToast('已加入购物车');
-    setTimeout(() => setToast(''), 2000);
+    queryClient.invalidateQueries({ queryKey: ['customer', 'cart'] });
+    toast.show('已加入购物车');
+  }
+
+  function openDish(dish: Dish) {
+    setSelectedDish(dish);
+    setPriceHistory([]);
+    if (customerToken) {
+      api.post('/customer/history', { dishId: dish.id }).catch(() => undefined);
+      fetch(`/go/dishes/${dish.id}/price-history`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      })
+        .then((r) => r.json())
+        .then((d) => setPriceHistory(d?.data || []))
+        .catch(() => undefined);
+    }
   }
 
   function switchLang() {
@@ -257,15 +173,35 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
     localStorage.setItem('lang', next);
   }
 
+  function claimCoupon(couponId: number) {
+    if (!customerToken) {
+      router.push('/account/login');
+      return;
+    }
+    api
+      .post('/customer/coupons/claim', { couponId })
+      .then(() => {
+        toast.show('领取成功！去购物车结算时可用');
+        queryClient.invalidateQueries({ queryKey: ['coupons', 'center', customerToken] });
+      })
+      .catch((e: any) => toast.show(e?.response?.data?.message || '领取失败'));
+  }
+
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 500);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const filtered =
+    activeCategory === 'all'
+      ? dishes
+      : dishes.filter((d) => d.categoryId === activeCategory);
+
+  const cartCount = customerToken ? 0 : guestCount;
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      {/* 磨砂导航 - sticky */}
       <header className="frosted sticky top-0 z-40">
         <div className="shell max-w-6xl mx-auto px-4 md:px-8 min-h-14 py-2.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
@@ -274,7 +210,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
               {i18n.brand}
             </span>
           </Link>
-          {/* 桌面端导航 */}
           <div className="hidden md:flex items-center gap-2">
             {isLoggedIn ? (
               <Link href="/account" className="pill pill-ghost !h-9 !px-4 !text-[13px]">我的</Link>
@@ -283,7 +218,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
             )}
             <Link href="/cart" className="pill pill-ghost !h-9 !px-4 !text-[13px]">🛒 购物车{cartCount > 0 && `(${cartCount})`}</Link>
           </div>
-          {/* 手机端汉堡菜单 */}
           <div className="md:hidden">
             <button onClick={() => setMenuOpen(!menuOpen)} className="pill pill-ghost !h-9 !w-9 !px-0 flex items-center justify-center text-lg">☰</button>
             {menuOpen && (
@@ -304,23 +238,14 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         </div>
       </header>
 
-      {/* Hero - 响应式字号，减少首屏占用 */}
       <section className="relative overflow-hidden px-4 md:px-8 pt-6 md:pt-10 pb-6 md:pb-8 text-center">
         <h1 className="cjk-display text-2xl md:text-4xl font-semibold mb-3" style={{ color: 'var(--fg)' }}>
           {i18n.tagline}
         </h1>
-        <p className="text-sm md:text-base mb-5" style={{ color: 'var(--muted)' }}>
-          {i18n.sub}
-        </p>
+        <p className="text-sm md:text-base mb-5" style={{ color: 'var(--muted)' }}>{i18n.sub}</p>
         <Link href="/assistant" className="pill pill-accent px-6 !h-12 !text-sm shadow-lg">{i18n.cta}</Link>
-        <div className="flex justify-center gap-4 md:gap-6 mt-5 text-xs md:text-sm" style={{ color: 'var(--muted)' }}>
-          <span>⭐ 真实评分</span>
-          <span>🛒 下单即达</span>
-          <span>🎟️ 领券立减</span>
-        </div>
       </section>
 
-      {/* 预算凑单 */}
       <section className="px-4 md:px-8 pb-6">
         <div className="xcard p-6 max-w-2xl mx-auto">
           <h2 className="font-semibold mb-2">💰 {i18n.bargainTitle}</h2>
@@ -334,17 +259,23 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
               className="w-full sm:flex-1 px-4 py-2.5 rounded-full border"
               style={{ borderColor: 'var(--border)' }}
             />
-            <button onClick={bargain} disabled={bargainLoading} className="pill pill-accent w-full sm:w-auto whitespace-nowrap">
-              {bargainLoading ? '...' : i18n.bargainBtn}
+            <button
+              onClick={() => {
+                const n = Number(budget);
+                if (!n || n <= 0) return;
+                bargain.mutate(n);
+              }}
+              disabled={bargain.isPending}
+              className="pill pill-accent w-full sm:w-auto whitespace-nowrap"
+            >
+              {bargain.isPending ? '...' : i18n.bargainBtn}
             </button>
           </div>
           {bargainRes && bargainRes.items.length > 0 && (
             <div className="mt-4 rounded-xl p-4" style={{ background: 'var(--bg-deep)' }}>
               <div className="flex justify-between text-sm font-medium mb-2">
                 <span>最优组合</span>
-                <span className="mono" style={{ color: 'var(--accent)' }}>
-                  合计 ¥{bargainRes.total.toFixed(2)}
-                </span>
+                <span className="mono" style={{ color: 'var(--accent)' }}>合计 ¥{bargainRes.total.toFixed(2)}</span>
               </div>
               <div className="space-y-1 mb-3 text-sm" style={{ color: 'var(--fg-soft)' }}>
                 {bargainRes.items.map((item) => (
@@ -354,20 +285,15 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
                   </div>
                 ))}
               </div>
-              <button onClick={addBargainToCart} className="pill pill-accent w-full !h-11">
-                一键加入购物车
-              </button>
+              <button onClick={addBargainToCart} className="pill pill-accent w-full !h-11">一键加入购物车</button>
             </div>
           )}
           {bargainRes && bargainRes.items.length === 0 && (
-            <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-              预算不足，点不起任何菜
-            </p>
+            <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>预算不足，点不起任何菜</p>
           )}
         </div>
       </section>
 
-      {/* 领券中心 */}
       {isLoggedIn && availableCoupons.length > 0 && (
         <section className="px-4 md:px-8 pb-6">
           <div className="xcard p-6 max-w-2xl mx-auto">
@@ -376,11 +302,7 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
               {availableCoupons.map((c) => {
                 const claimed = claimedIds.includes(c.id);
                 return (
-                  <div
-                    key={c.id}
-                    className="flex items-center justify-between rounded-xl px-4 py-3"
-                    style={{ background: 'var(--bg-deep)' }}
-                  >
+                  <div key={c.id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: 'var(--bg-deep)' }}>
                     <div>
                       <div className="font-medium text-sm">{c.title}</div>
                       <div className="text-xs" style={{ color: 'var(--muted)' }}>
@@ -390,9 +312,7 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
                     <button
                       onClick={() => claimCoupon(c.id)}
                       disabled={claimed}
-                      className={`pill !h-9 !px-5 !text-[13px] ${
-                        claimed ? 'pill-soft opacity-60' : 'pill-accent'
-                      }`}
+                      className={`pill !h-9 !px-5 !text-[13px] ${claimed ? 'pill-soft opacity-60' : 'pill-accent'}`}
                     >
                       {claimed ? '已领取' : '领取'}
                     </button>
@@ -404,7 +324,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         </section>
       )}
 
-      {/* 菜单 */}
       <section className="px-4 md:px-8 py-8">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-5">
@@ -412,7 +331,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
             <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{i18n.menuSub}</p>
           </div>
 
-          {/* 分类按钮 - 横向滚动，不溢出 */}
           <div className="flex overflow-x-auto gap-2 mb-6 pb-2 -mx-4 px-4" style={{ scrollbarWidth: 'thin' }}>
             <button
               onClick={() => setActiveCategory('all')}
@@ -428,9 +346,7 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
           </div>
 
           {filtered.length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--muted)' }}>
-              {i18n.empty}
-            </div>
+            <div className="text-center py-16" style={{ color: 'var(--muted)' }}>{i18n.empty}</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((dish, idx) => (
@@ -447,7 +363,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         </div>
       </section>
 
-      {/* 菜品详情弹窗 */}
       {selectedDish && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
@@ -456,14 +371,10 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
           <div className="xcard max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
               {selectedDish.image ? <img src={selectedDish.image} alt={selectedDish.name} className="w-16 h-16 rounded-lg object-cover" /> : <span className="text-5xl">🍽️</span>}
-              <button onClick={() => setSelectedDish(null)} className="text-lg" style={{ color: 'var(--muted)' }}>
-                ✕
-              </button>
+              <button onClick={() => setSelectedDish(null)} className="text-lg" style={{ color: 'var(--muted)' }}>✕</button>
             </div>
             <h3 className="serif text-2xl font-semibold mb-2">{selectedDish.name}</h3>
-            <p className="mb-4" style={{ color: 'var(--muted)' }}>
-              {selectedDish.description || '暂无描述'}
-            </p>
+            <p className="mb-4" style={{ color: 'var(--muted)' }}>{selectedDish.description || '暂无描述'}</p>
             <div className="flex items-center justify-between">
               <span className="mono text-2xl font-semibold" style={{ color: 'var(--accent)' }}>
                 ¥{Number(selectedDish.price).toFixed(2)}
@@ -474,16 +385,12 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
             </div>
             {priceHistory.length > 0 && (
               <div className="mt-5">
-                <div className="text-sm mb-2" style={{ color: 'var(--muted)' }}>
-                  📈 近 90 天价格走势
-                </div>
+                <div className="text-sm mb-2" style={{ color: 'var(--muted)' }}>📈 近 90 天价格走势</div>
                 <PriceChart data={priceHistory} />
               </div>
             )}
             <div className="mt-6">
-              <Link href="/assistant" className="pill pill-accent w-full">
-                让 AI 帮我下单
-              </Link>
+              <Link href="/assistant" className="pill pill-accent w-full">让 AI 帮我下单</Link>
             </div>
           </div>
         </div>
@@ -493,7 +400,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         星选 AI 购物管家 · 真实数据驱动的电商 Agent 演示项目
       </footer>
 
-      {/* 返回顶部按钮 */}
       {showScrollTop && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -504,7 +410,6 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         </button>
       )}
 
-      {/* 底部 TabBar（手机端） */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around h-14 border-t" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
         <Link href="/" className="flex flex-col items-center justify-center text-xs" style={{ color: 'var(--accent)' }}>
           <span className="text-lg">🏠</span><span>首页</span>
@@ -520,11 +425,9 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
         </Link>
       </nav>
 
-      {toast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm shadow-lg z-50 text-white"
-          style={{ background: 'var(--fg)' }}
-        >
-          {toast}
+      {toast.message && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm shadow-lg z-50 text-white" style={{ background: 'var(--fg)' }}>
+          {toast.message}
         </div>
       )}
     </div>
@@ -560,9 +463,7 @@ function PriceChart({ data }: { data: { timestamp: number; price: number }[] }) 
       </svg>
       <div className="flex justify-between text-[11px]" style={{ color: 'var(--muted)' }}>
         <span>{new Date(data[0].timestamp * 1000).toLocaleDateString('zh-CN')}</span>
-        <span>
-          最新 ¥{last.price.toFixed(2)} · 最低 ¥{min.toFixed(2)}
-        </span>
+        <span>最新 ¥{last.price.toFixed(2)} · 最低 ¥{min.toFixed(2)}</span>
         <span>{new Date(last.timestamp * 1000).toLocaleDateString('zh-CN')}</span>
       </div>
     </div>

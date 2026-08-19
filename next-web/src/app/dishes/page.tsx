@@ -1,104 +1,69 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Header from '@/components/Header';
+import { useDishesQuery, useCategoriesQuery } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
 import { dishesAPI } from '@/lib/api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queries';
+import { useToast } from '@/lib/use-toast';
+import type { Dish } from '@/types';
 
-interface Dish {
-  id: number;
+interface DishForm {
   name: string;
-  categoryId: number;
-  categoryName?: string;
-  price: number;
-  image?: string;
-  description?: string;
+  categoryId: string;
+  price: string;
+  description: string;
   status: number;
-  createTime: string;
 }
 
-interface Category {
-  id: number;
-  name: string;
-}
+const emptyForm: DishForm = { name: '', categoryId: '', price: '', description: '', status: 1 };
 
 export default function DishesPage() {
-  const router = useRouter();
-  const [dishes, setDishes] = useState<Dish[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState<number | ''>('');
   const [showModal, setShowModal] = useState(false);
-  const [editingDish, setEditingDish] = useState<Dish | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    categoryId: '',
-    price: '',
-    description: '',
-    status: 1,
+  const [editing, setEditing] = useState<Dish | null>(null);
+  const [form, setForm] = useState<DishForm>(emptyForm);
+
+  const { data, isLoading: loading } = useDishesQuery(page, categoryFilter);
+  const { data: catData } = useCategoriesQuery();
+  const categories = Array.isArray(catData) ? catData : catData?.data || [];
+  const dishes = data?.data || [];
+  const totalPages = data?.meta?.totalPages || 1;
+
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const save = useMutation({
+    mutationFn: (payload: { id?: number; body: Record<string, unknown> }) =>
+      payload.id ? dishesAPI.update(payload.id, payload.body) : dishesAPI.create(payload.body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dishes'] });
+      setShowModal(false);
+      setEditing(null);
+      setForm(emptyForm);
+      toast.show('已保存');
+    },
+    onError: (e: any) => toast.show(e?.response?.data?.message || '保存失败'),
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => dishesAPI.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dishes'] });
+      toast.show('已删除');
+    },
+    onError: () => toast.show('删除失败'),
+  });
+  const toggle = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: number }) => dishesAPI.update(id, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dishes'] }),
   });
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-    fetchDishes();
-    fetchCategories();
-  }, [page, categoryFilter]);
-
-  const fetchDishes = async () => {
-    try {
-      const res: any = await dishesAPI.findAll(page, 20, categoryFilter || undefined);
-      setDishes(res.data);
-      setTotalPages(res.meta.totalPages);
-    } catch (error) {
-      console.error('Failed to fetch dishes:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const res: any = await dishesAPI.getCategories();
-      // 接口返回 { data: [...], meta }，取 data；兼容直接返回数组的情况
-      setCategories(Array.isArray(res) ? res : (res?.data || []));
-    } catch (error) {
-      console.error('Failed to fetch categories:', error);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const data = {
-        name: formData.name,
-        categoryId: Number(formData.categoryId),
-        price: Number(formData.price),
-        description: formData.description,
-        status: formData.status,
-      };
-      if (editingDish) {
-        await dishesAPI.update(editingDish.id, data);
-      } else {
-        await dishesAPI.create(data);
-      }
-      setShowModal(false);
-      setEditingDish(null);
-      setFormData({ name: '', categoryId: '', price: '', description: '', status: 1 });
-      fetchDishes();
-    } catch (error) {
-      console.error('Failed to save dish:', error);
-    }
-  };
-
-  const handleEdit = (dish: Dish) => {
-    setEditingDish(dish);
-    setFormData({
+  function openEdit(dish: Dish) {
+    setEditing(dish);
+    setForm({
       name: dish.name,
       categoryId: String(dish.categoryId),
       price: String(dish.price),
@@ -106,33 +71,33 @@ export default function DishesPage() {
       status: dish.status,
     });
     setShowModal(true);
-  };
+  }
 
-  const handleDelete = async (id: number) => {
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    save.mutate({
+      id: editing?.id,
+      body: {
+        name: form.name,
+        categoryId: Number(form.categoryId),
+        price: Number(form.price),
+        description: form.description,
+        status: form.status,
+      },
+    });
+  }
+
+  function onDelete(id: number) {
     if (!confirm('确定要删除这个菜品吗？')) return;
-    try {
-      await dishesAPI.remove(id);
-      fetchDishes();
-    } catch (error) {
-      console.error('Failed to delete dish:', error);
-    }
-  };
-
-  const handleStatusToggle = async (id: number, currentStatus: number) => {
-    try {
-      await dishesAPI.update(id, { status: currentStatus === 1 ? 0 : 1 });
-      fetchDishes();
-    } catch (error) {
-      console.error('Failed to toggle status:', error);
-    }
-  };
+    remove.mutate(id);
+  }
 
   return (
-<div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
       <Header />
       <main className="container mx-auto px-4 py-8">
-<div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-<h1 className="atitle mb-6">菜品管理</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+          <h1 className="atitle mb-6">菜品管理</h1>
           <div className="flex items-center gap-3">
             <select
               value={categoryFilter}
@@ -140,14 +105,14 @@ export default function DishesPage() {
               className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">全部分类</option>
-              {categories.map(cat => (
+              {categories.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
             <button
               onClick={() => {
-                setEditingDish(null);
-                setFormData({ name: '', categoryId: '', price: '', description: '', status: 1 });
+                setEditing(null);
+                setForm(emptyForm);
                 setShowModal(true);
               }}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -188,19 +153,21 @@ export default function DishesPage() {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleEdit(dish)}
+                        onClick={() => openEdit(dish)}
                         className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         编辑
                       </button>
                       <button
-                        onClick={() => handleStatusToggle(dish.id, dish.status)}
+                        onClick={() => toggle.mutate({ id: dish.id, status: dish.status === 1 ? 0 : 1 })}
+                        disabled={toggle.isPending}
                         className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         {dish.status === 1 ? '停售' : '启售'}
                       </button>
                       <button
-                        onClick={() => handleDelete(dish.id)}
+                        onClick={() => onDelete(dish.id)}
+                        disabled={remove.isPending}
                         className="px-3 py-1.5 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                       >
                         删除
@@ -211,21 +178,20 @@ export default function DishesPage() {
               ))}
             </div>
 
-            {/* Pagination */}
             <div className="flex items-center justify-between mt-8">
               <p className="text-sm text-gray-500">
                 共 {totalPages} 页，当前第 {page} 页
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
                   className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
                   上一页
                 </button>
                 <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
                   className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
@@ -236,20 +202,19 @@ export default function DishesPage() {
           </>
         )}
 
-        {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-6">
-                {editingDish ? '编辑菜品' : '新增菜品'}
+                {editing ? '编辑菜品' : '新增菜品'}
               </h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={submit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">菜品名称</label>
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
@@ -257,13 +222,13 @@ export default function DishesPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
                   <select
-                    value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                    value={form.categoryId}
+                    onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   >
                     <option value="">请选择分类</option>
-                    {categories.map(cat => (
+                    {categories.map((cat: any) => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
                   </select>
@@ -273,8 +238,8 @@ export default function DishesPage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
@@ -282,8 +247,8 @@ export default function DishesPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
                   <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     rows={3}
                   />
@@ -298,9 +263,10 @@ export default function DishesPage() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    disabled={save.isPending}
+                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                   >
-                    {editingDish ? '保存' : '创建'}
+                    {save.isPending ? '保存中…' : editing ? '保存' : '创建'}
                   </button>
                 </div>
               </form>
@@ -311,3 +277,6 @@ export default function DishesPage() {
     </div>
   );
 }
+
+// 确保 queryKeys 引用进来
+void queryKeys;

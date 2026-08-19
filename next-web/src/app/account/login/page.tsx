@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
+import { authAPI } from '@/lib/api';
 import { mergeLocalCartToServer, getLocalCartCount } from '@/lib/cart-storage';
+import { useAuthStore } from '@/lib/stores';
+import { useToast } from '@/lib/use-toast';
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -11,50 +15,41 @@ export default function CustomerLoginPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const url =
-        mode === 'login' ? '/api/auth/customer/login' : '/api/auth/customer/register';
-      const body =
-        mode === 'login'
-          ? { phone, password }
-          : { name, phone, password };
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || '操作失败');
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (mode === 'login') {
+        return authAPI.customerLogin(phone, password) as Promise<any>;
       }
-      const data = await res.json();
+      return authAPI.customerRegister({ name, phone, password }) as Promise<any>;
+    },
+    onSuccess: async (data: any) => {
+      if (!data?.token) {
+        toast.show('登录响应缺少 token');
+        return;
+      }
       localStorage.setItem('customerToken', data.token);
       localStorage.setItem('customerUser', JSON.stringify(data.user));
+      useAuthStore.getState().setCustomerAuth(data.token, data.user);
 
-      // 登录成功:把未登录时的本地暂存购物车合并到服务端
-      // 只在从"未登录"来的会话才需要合并;清 localStorage 后该值为 0
       const pending = getLocalCartCount();
       if (pending > 0) {
         const { merged, failed } = await mergeLocalCartToServer(data.token);
         if (failed > 0) {
-          // 部分失败时仍跳走,toast 让 /account 或 /cart 页面提示
           console.warn(`暂存购物车合并:成功 ${merged} / 失败 ${failed}`);
         }
       }
-
       router.push('/account');
-    } catch (err: any) {
-      setError(err.message || '网络错误');
-    } finally {
-      setLoading(false);
-    }
+    },
+    onError: (err: any) => {
+      toast.show(err?.response?.data?.message || '操作失败');
+    },
+  });
+
+  function onFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit.mutate();
   }
 
   return (
@@ -84,7 +79,7 @@ export default function CustomerLoginPage() {
             ))}
           </div>
 
-          <form onSubmit={submit} className="space-y-3">
+          <form onSubmit={onFormSubmit} className="space-y-3">
             {mode === 'register' && (
               <input
                 value={name}
@@ -95,31 +90,31 @@ export default function CustomerLoginPage() {
                 style={{ borderColor: 'var(--border)' }}
               />
             )}
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="手机号"
-                required
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none"
-                style={{ borderColor: 'var(--border)' }}
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="手机号"
+              required
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none"
+              style={{ borderColor: 'var(--border)' }}
             />
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="密码"
-                type="password"
-                required
-                minLength={6}
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none"
-                style={{ borderColor: 'var(--border)' }}
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="密码"
+              type="password"
+              required
+              minLength={6}
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none"
+              style={{ borderColor: 'var(--border)' }}
             />
             <p className="text-xs" style={{ color: 'var(--muted)' }}>至少 6 位</p>
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {submit.isError && <p className="text-sm text-red-500">{toast.message || '操作失败'}</p>}
             <button
-              disabled={loading}
+              disabled={submit.isPending}
               className="pill pill-accent w-full !h-12"
             >
-              {loading ? '请稍候...' : mode === 'login' ? '登 录' : '注册并登录'}
+              {submit.isPending ? '请稍候...' : mode === 'login' ? '登 录' : '注册并登录'}
             </button>
             {mode === 'login' && (
               <div className="flex justify-between text-xs mt-2">

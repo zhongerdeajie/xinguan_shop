@@ -1,80 +1,68 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Header from '@/components/Header';
+import { useCategoriesAdminQuery, useCategoryMutations } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import { useToast } from '@/lib/use-toast';
+import type { Category } from '@/types';
 
-interface Category {
-  id: number;
+interface CategoryForm {
   name: string;
   type: number;
   sort: number;
   status: number;
 }
 
+const empty: CategoryForm = { name: '', type: 1, sort: 0, status: 1 };
+
 export default function CategoriesPage() {
-  const router = useRouter();
-  const [list, setList] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
+  const { data: list = [], isLoading: loading } = useCategoriesAdminQuery();
+  const { create, update, remove } = useCategoryMutations();
+  const toast = useToast();
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
-  const [form, setForm] = useState({ name: '', type: 1, sort: 0, status: 1 });
+  const [form, setForm] = useState<CategoryForm>(empty);
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  async function load() {
-    try {
-      const res = await fetch('/api/categories?page=1&limit=100', { headers: authHeaders() });
-      const data = await res.json();
-      setList(data.data || []);
-    } finally {
-      setLoading(false);
-    }
+  function openCreate() {
+    setEditing(null);
+    setForm(empty);
+    setShowModal(true);
   }
-
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    load();
-  }, []);
-
+  function openEdit(c: Category) {
+    setEditing(c);
+    setForm({ name: c.name, type: c.type || 1, sort: c.sort, status: c.status });
+    setShowModal(true);
+  }
   async function save() {
-    const body = JSON.stringify(form);
-    const headers = { ...authHeaders(), 'Content-Type': 'application/json' };
-    const res = editing
-      ? await fetch(`/api/categories/${editing.id}`, { method: 'PUT', headers, body })
-      : await fetch('/api/categories', { method: 'POST', headers, body });
-    if (res.ok) {
+    try {
+      const body: Record<string, unknown> = { ...form };
+      if (editing) await update.mutateAsync({ id: editing.id, body });
+      else await create.mutateAsync(body);
       setShowModal(false);
       setEditing(null);
-      setForm({ name: '', type: 1, sort: 0, status: 1 });
-      load();
-    } else {
-      alert('保存失败');
+      toast.show('已保存');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '保存失败');
     }
   }
-
-  async function remove(id: number) {
+  async function onRemove(id: number) {
     if (!confirm('确定删除这个分类吗？')) return;
-    const res = await fetch(`/api/categories/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    });
-    if (res.ok) load();
+    try {
+      await remove.mutateAsync(id);
+      toast.show('已删除');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '删除失败');
+    }
   }
-
-  async function toggleStatus(c: Category) {
-    const res = await fetch(`/api/categories/${c.id}`, {
-      method: 'PUT',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: c.status === 1 ? 0 : 1 }),
-    });
-    if (res.ok) load();
+  async function onToggle(c: Category) {
+    try {
+      await update.mutateAsync({ id: c.id, body: { status: c.status === 1 ? 0 : 1 } });
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '更新失败');
+    }
   }
 
   return (
@@ -83,14 +71,7 @@ export default function CategoriesPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="atitle">分类管理</h1>
-          <button
-            onClick={() => {
-              setEditing(null);
-              setForm({ name: '', type: 1, sort: 0, status: 1 });
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
+          <button onClick={openCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
             + 新增分类
           </button>
         </div>
@@ -115,7 +96,8 @@ export default function CategoriesPage() {
                   <td className="px-4 py-3">{c.sort}</td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => toggleStatus(c)}
+                      onClick={() => onToggle(c)}
+                      disabled={update.isPending}
                       className={`px-2 py-1 rounded-full text-xs ${
                         c.status === 1 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
                       }`}
@@ -124,19 +106,8 @@ export default function CategoriesPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    <button
-                      onClick={() => {
-                        setEditing(c);
-                        setForm({ name: c.name, type: c.type, sort: c.sort, status: c.status });
-                        setShowModal(true);
-                      }}
-                      className="text-primary-600 hover:underline"
-                    >
-                      编辑
-                    </button>
-                    <button onClick={() => remove(c.id)} className="text-red-500 hover:underline">
-                      删除
-                    </button>
+                    <button onClick={() => openEdit(c)} className="text-primary-600 hover:underline">编辑</button>
+                    <button onClick={() => onRemove(c.id)} disabled={remove.isPending} className="text-red-500 hover:underline">删除</button>
                   </td>
                 </tr>
               ))}
@@ -176,13 +147,8 @@ export default function CategoriesPage() {
               />
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">
-                取消
-              </button>
-              <button
-                onClick={save}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">取消</button>
+              <button onClick={save} disabled={create.isPending || update.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
                 保存
               </button>
             </div>

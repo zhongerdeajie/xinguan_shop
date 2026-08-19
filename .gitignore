@@ -27,3 +27,4 @@ golang_learn/
 
 # Next.js 自动生成的文件，不该提交到 git
 next-env.d.ts
+*.tsbuildinfo

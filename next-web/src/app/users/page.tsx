@@ -1,49 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-
-interface User {
-  id: number;
-  name?: string;
-  phone?: string;
-  openid?: string;
-  createTime?: string;
-}
+import { useUsersQuery, useRemoveUserMutation } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import { useToast } from '@/lib/use-toast';
 
 export default function UsersPage() {
-  const router = useRouter();
-  const [list, setList] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
+  const { data: list = [], isLoading: loading } = useUsersQuery();
+  const remove = useRemoveUserMutation();
+  const toast = useToast();
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  async function load() {
-    try {
-      const res = await fetch('/api/users?page=1&limit=100', { headers: authHeaders() });
-      const data = await res.json();
-      setList(data.data || []);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    load();
-  }, []);
-
-  async function remove(id: number) {
+  async function onRemove(id: number) {
     if (!confirm('确定删除这个用户吗？会同时影响其订单数据')) return;
-    const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) load();
+    try {
+      await remove.mutateAsync(id);
+      toast.show('已删除');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '删除失败');
+    }
   }
 
   return (
@@ -74,7 +49,7 @@ export default function UsersPage() {
                     {u.createTime ? new Date(u.createTime).toLocaleString('zh-CN') : '-'}
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => remove(u.id)} className="text-red-500 hover:underline">
+                    <button onClick={() => onRemove(u.id)} className="text-red-500 hover:underline" disabled={remove.isPending}>
                       删除
                     </button>
                   </td>

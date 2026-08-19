@@ -1,98 +1,66 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Header from '@/components/Header';
-
-interface Coupon {
-  id: number;
-  title: string;
-  amount: number | string;
-  threshold: number | string;
-  status: number;
-}
+import { useCouponsQuery, useCouponMutations } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import { marketingAPI } from '@/lib/api';
+import { useMutation } from '@tanstack/react-query';
+import { useToast } from '@/lib/use-toast';
 
 export default function MarketingPage() {
-  const router = useRouter();
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  useAdminGuard();
+  const { data: coupons = [] } = useCouponsQuery();
+  const { create, remove } = useCouponMutations();
+  const toast = useToast();
+
   const [form, setForm] = useState({ title: '', amount: '', threshold: '' });
   const [topic, setTopic] = useState('新品辣椒炒肉');
   const [copy, setCopy] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const generate = useMutation({
+    mutationFn: (t: string) => marketingAPI.generateCopy(t).then((r: any) => r?.data?.response || r?.data || '生成失败'),
+    onSuccess: (text: string) => {
+      setCopy(text);
+      toast.show('文案已生成');
+    },
+    onError: () => {
+      setCopy('AI 服务暂时不可用');
+      toast.show('生成失败');
+    },
+  });
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    load();
-  }, []);
-
-  async function load() {
-    const res = await fetch('/api/coupons', { headers: authHeaders() });
-    const data = await res.json();
-    setCoupons(Array.isArray(data) ? data : []);
-  }
-
-  async function createCoupon() {
+  async function onCreate() {
     if (!form.title || !form.amount) return;
-    const res = await fetch('/api/coupons', {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await create.mutateAsync({
         title: form.title,
         amount: Number(form.amount),
         threshold: Number(form.threshold || 0),
-      }),
-    });
-    if (res.ok) {
+      });
       setForm({ title: '', amount: '', threshold: '' });
-      load();
-    } else {
-      alert('创建失败');
+      toast.show('已创建');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '创建失败');
     }
   }
 
-  async function removeCoupon(id: number) {
+  async function onRemove(id: number) {
     if (!confirm('确定删除该优惠券吗？')) return;
-    const res = await fetch(`/api/coupons/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) load();
-  }
-
-  async function generateCopy() {
-    if (!topic) return;
-    setGenerating(true);
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `我是商家，帮我写一条「${topic}」的推广文案，要求：有吸引力、不超过 100 字、含活动引导。`,
-          sessionId: 'merchant-copy',
-        }),
-      });
-      const data = await res.json();
-      setCopy(data.response || '生成失败');
-    } catch {
-      setCopy('AI 服务暂时不可用');
-    } finally {
-      setGenerating(false);
+      await remove.mutateAsync(id);
+      toast.show('已删除');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '删除失败');
     }
   }
 
   return (
-<div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
       <Header />
       <main className="container mx-auto px-4 py-8">
-<h1 className="atitle mb-6">📣 营销中心</h1>
+        <h1 className="atitle mb-6">📣 营销中心</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 优惠券 */}
           <div className="apanel">
             <h2 className="text-lg font-semibold mb-4">优惠券管理</h2>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -116,10 +84,7 @@ export default function MarketingPage() {
                 type="number"
                 className="w-20 px-3 py-2 border border-gray-300 rounded-lg"
               />
-              <button
-                onClick={createCoupon}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
+              <button onClick={onCreate} disabled={create.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
                 创建
               </button>
             </div>
@@ -132,7 +97,7 @@ export default function MarketingPage() {
                       满 ¥{Number(c.threshold).toFixed(2)} 减 ¥{Number(c.amount).toFixed(2)}
                     </div>
                   </div>
-                  <button onClick={() => removeCoupon(c.id)} className="text-red-500 text-sm hover:underline">
+                  <button onClick={() => onRemove(c.id)} disabled={remove.isPending} className="text-red-500 text-sm hover:underline">
                     删除
                   </button>
                 </div>
@@ -141,7 +106,6 @@ export default function MarketingPage() {
             </div>
           </div>
 
-          {/* AI 文案生成 */}
           <div className="apanel">
             <h2 className="text-lg font-semibold mb-4">🤖 AI 推广文案</h2>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -152,11 +116,11 @@ export default function MarketingPage() {
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
               />
               <button
-                onClick={generateCopy}
-                disabled={generating}
+                onClick={() => generate.mutate(topic)}
+                disabled={generate.isPending || !topic}
                 className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50"
               >
-                {generating ? '生成中...' : '生成文案'}
+                {generate.isPending ? '生成中...' : '生成文案'}
               </button>
             </div>
             <textarea

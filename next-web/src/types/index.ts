@@ -2,15 +2,31 @@
 export interface User {
   id: number;
   username: string;
+  name?: string;
+  phone?: string;
+  openid?: string;
   role: string;
   personId?: number;
-  createdAt: string;
+  createTime?: string;
+  createdAt?: string;
   updatedAt: string;
+}
+
+export interface CustomerProfile {
+  id: number;
+  name?: string;
+  phone?: string;
+  createTime?: string;
 }
 
 export interface LoginResponse {
   token: string;
   user: User;
+}
+
+export interface CustomerLoginResponse {
+  token: string;
+  user: CustomerProfile;
 }
 
 // ==================== Order Types ====================
@@ -38,6 +54,7 @@ export interface Order {
   packAmount?: number;
   tablewareNumber?: number;
   tablewareStatus: number;
+  orderDetails?: OrderDetail[];
 }
 
 export interface OrderDetail {
@@ -66,6 +83,8 @@ export interface Dish {
   updateTime?: string;
   createUser?: number;
   updateUser?: number;
+  rating?: number;
+  sales?: number;
 }
 
 export interface Category {
@@ -76,12 +95,52 @@ export interface Category {
   status: number;
 }
 
+// ==================== Setmeal Types ====================
+export interface Setmeal {
+  id: number;
+  name: string;
+  categoryId: number;
+  category?: { name: string };
+  price: number | string;
+  description?: string;
+  status: number;
+}
+
+// ==================== Employee Types ====================
+export interface Employee {
+  id: number;
+  name: string;
+  username: string;
+  phone?: string;
+  sex?: string;
+  status: number;
+  createTime?: string;
+}
+
+// ==================== Coupon Types ====================
+export interface Coupon {
+  id: number;
+  title: string;
+  amount: number | string;
+  threshold: number | string;
+  status: number;
+}
+
+export interface MyCoupon {
+  id: number;
+  status: number;
+  couponId?: number;
+  coupon?: Coupon;
+}
+
 // ==================== Dashboard Types ====================
 export interface DashboardStats {
   totalOrders: number;
   totalDishes: number;
   totalUsers: number;
   todayRevenue: number;
+  trend?: { date: string; count: number }[];
+  topDishes?: { name: string; sales: number }[];
 }
 
 // ==================== Common Types ====================
@@ -99,4 +158,19 @@ export interface ApiResponse<T> {
   code: number;
   message: string;
   data: T;
+}
+
+// ==================== Browse / Chat History ====================
+export interface BrowseItem {
+  id: number;
+  viewTime: string;
+  dish?: { id: number; name?: string; price?: number | string; description?: string };
+}
+
+export interface ChatHistoryItem {
+  id: number;
+  role: string;
+  content: string;
+  intent?: string;
+  createTime: string;
 }

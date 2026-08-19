@@ -1,21 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useCallback } from 'react';
 import Header from '@/components/Header';
-import { ordersAPI } from '@/lib/api';
 import { useAdminOrdersWS } from '@/lib/useAdminOrdersWS';
-
-interface Order {
-  id: number;
-  number: string;
-  status: number;
-  amount: number;
-  orderTime: string;
-  userName: string;
-  consignee: string;
-  phone: string;
-}
+import { useOrdersQuery, useUpdateOrderStatusMutation } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import type { Order } from '@/types';
 
 const statusMap: Record<number, { label: string; color: string }> = {
   1: { label: '待付款', color: 'bg-yellow-100 text-yellow-800' },
@@ -27,37 +17,16 @@ const statusMap: Record<number, { label: string; color: string }> = {
 };
 
 export default function OrdersPage() {
-  const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState<number | ''>('');
+  const { data, isLoading: loading, refetch } = useOrdersQuery(page, statusFilter);
+  const updateStatus = useUpdateOrderStatusMutation();
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-    fetchOrders();
-  }, [page, statusFilter]);
+  const orders = (data?.data || []) as Order[];
+  const totalPages = data?.meta?.totalPages || 1;
 
-  const fetchOrders = async () => {
-    try {
-      const res: any = await ordersAPI.findAll(page, 20, statusFilter || undefined);
-      setOrders(res.data);
-      setTotalPages(res.meta.totalPages);
-    } catch (error) {
-      console.error('Failed to fetch orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // WebSocket：新订单实时推送
-  const handleNewOrder = useCallback((_order: { id: number; number: string; amount: number }) => {
-    // 浏览器原生提示音（短促 beep）
+  const handleNewOrder = useCallback(() => {
     if (typeof window !== 'undefined') {
       try {
         const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
@@ -73,30 +42,20 @@ export default function OrdersPage() {
           osc.stop(ctx.currentTime + 0.15);
         }
       } catch {
-        // 静默失败
+        /* 静默失败 */
       }
     }
-    // 重新拉列表 + 把页面翻回第一页,这样新订单立刻可见
     setPage(1);
-    fetchOrders();
-  }, []);
+    refetch();
+  }, [refetch]);
   useAdminOrdersWS({ onNewOrder: handleNewOrder });
 
-  const handleStatusChange = async (orderId: number, newStatus: number) => {
-    try {
-      await ordersAPI.updateStatus(orderId, newStatus);
-      fetchOrders();
-    } catch (error) {
-      console.error('Failed to update order status:', error);
-    }
-  };
-
   return (
-<div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
       <Header />
       <main className="container mx-auto px-4 py-8">
-<div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-<h1 className="atitle mb-6">订单管理</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+          <h1 className="atitle mb-6">订单管理</h1>
           <div className="flex items-center gap-3">
             <select
               value={statusFilter}
@@ -121,7 +80,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           <>
-<div className="apanel overflow-hidden">
+            <div className="apanel overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -160,7 +119,8 @@ export default function OrdersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {order.status === 2 && (
                           <button
-                            onClick={() => handleStatusChange(order.id, 3)}
+                            onClick={() => updateStatus.mutate({ id: order.id, status: 3 })}
+                            disabled={updateStatus.isPending}
                             className="text-primary-600 hover:text-primary-800 font-medium"
                           >
                             接单
@@ -168,7 +128,8 @@ export default function OrdersPage() {
                         )}
                         {order.status === 3 && (
                           <button
-                            onClick={() => handleStatusChange(order.id, 4)}
+                            onClick={() => updateStatus.mutate({ id: order.id, status: 4 })}
+                            disabled={updateStatus.isPending}
                             className="text-primary-600 hover:text-primary-800 font-medium"
                           >
                             派送
@@ -176,7 +137,8 @@ export default function OrdersPage() {
                         )}
                         {order.status === 4 && (
                           <button
-                            onClick={() => handleStatusChange(order.id, 5)}
+                            onClick={() => updateStatus.mutate({ id: order.id, status: 5 })}
+                            disabled={updateStatus.isPending}
                             className="text-primary-600 hover:text-primary-800 font-medium"
                           >
                             完成
@@ -189,21 +151,20 @@ export default function OrdersPage() {
               </table>
             </div>
 
-            {/* Pagination */}
             <div className="flex items-center justify-between mt-6">
               <p className="text-sm text-gray-500">
                 共 {totalPages} 页，当前第 {page} 页
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
                   className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
                   上一页
                 </button>
                 <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
                   className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >

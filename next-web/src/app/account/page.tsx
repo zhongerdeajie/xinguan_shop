@@ -5,43 +5,22 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { EmptyState } from '@/components/EmptyState';
+import {
+  useCustomerProfileQuery,
+  useCustomerOrdersQuery,
+  useCustomerHistoryQuery,
+  useCustomerChatQuery,
+  useCustomerCouponsQuery,
+} from '@/lib/queries';
+import { useCustomerGuard } from '@/lib/guards';
+import { useAuthStore } from '@/lib/stores';
+import { useMutation } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { useToast } from '@/lib/use-toast';
+import type { Order } from '@/types';
 
-interface Profile {
-  id: number;
-  name?: string;
-  phone?: string;
-  createTime?: string;
-}
-
-interface Order {
-  id: number;
-  number?: string;
-  amount?: number | string;
-  status?: number;
-  payStatus?: number;
-  orderTime?: string;
-  orderDetails?: { name?: string; number?: number; amount?: number | string }[];
-}
-
-interface BrowseItem {
-  id: number;
-  viewTime: string;
-  dish?: { id: number; name?: string; price?: number | string; description?: string };
-}
-
-interface ChatItem {
-  id: number;
-  role: string;
-  content: string;
-  intent?: string;
-  createTime: string;
-}
-
-interface MyCoupon {
-  id: number;
-  status: number;
-  coupon?: { id: number; title: string; amount: number | string; threshold: number | string };
-}
+type Tab = 'orders' | 'browse' | 'chat' | 'coupons';
+const VALID_TABS: Tab[] = ['orders', 'browse', 'chat', 'coupons'];
 
 const STATUS_TEXT: Record<number, string> = {
   1: '待付款',
@@ -54,89 +33,58 @@ const STATUS_TEXT: Record<number, string> = {
 
 export default function AccountPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<'orders' | 'browse' | 'chat' | 'coupons'>('orders');
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [browse, setBrowse] = useState<BrowseItem[]>([]);
-  const [chat, setChat] = useState<ChatItem[]>([]);
-  const [coupons, setCoupons] = useState<MyCoupon[]>([]);
-  const [loading, setLoading] = useState(true);
+  const guardOk = useCustomerGuard();
+  const clearCustomerAuth = useAuthStore((s) => s.clearCustomerAuth);
+  const toast = useToast();
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('customerToken');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+  const [tab, setTab] = useState<Tab>('orders');
+  const { data: profile } = useCustomerProfileQuery();
+  const ordersQuery = useCustomerOrdersQuery();
+  const historyQuery = useCustomerHistoryQuery();
+  const chatQuery = useCustomerChatQuery();
+  const couponsQuery = useCustomerCouponsQuery();
 
-  // 初次挂载：鉴权 + 读取 URL tab 参数
   useEffect(() => {
-    if (!localStorage.getItem('customerToken')) {
-      router.push('/account/login');
-      return;
-    }
+    if (typeof window === 'undefined') return;
     const urlTab = new URLSearchParams(window.location.search).get('tab');
-    if (urlTab === 'orders' || urlTab === 'browse' || urlTab === 'chat' || urlTab === 'coupons') {
-      setTab(urlTab);
-    } else {
-      load();
+    if (urlTab && (VALID_TABS as string[]).includes(urlTab)) {
+      setTab(urlTab as Tab);
     }
   }, []);
 
-  // tab 变化时重新加载数据并同步 URL
   useEffect(() => {
-    load();
+    if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tab);
     window.history.replaceState({}, '', url.toString());
   }, [tab]);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const headers = authHeaders();
-      const profileRes = await fetch('/api/customer/profile', { headers });
-      setProfile(await profileRes.json());
-      if (tab === 'orders') {
-        const res = await fetch('/api/customer/orders', { headers });
-        setOrders(await res.json());
-      } else if (tab === 'browse') {
-        const res = await fetch('/api/customer/history', { headers });
-        setBrowse(await res.json());
-      } else if (tab === 'chat') {
-        const res = await fetch('/api/customer/chat-history', { headers });
-        setChat(await res.json());
-      } else if (tab === 'coupons') {
-        const res = await fetch('/api/customer/coupons', { headers });
-        setCoupons(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function refund(order: Order) {
-    if (!confirm(`确认对订单 ${order.number || order.id} 发起退款吗？`)) return;
-    const headers = authHeaders();
-    try {
-      const res = await fetch(`/go/payment/refund/${order.id}`, {
-        method: 'POST',
-        headers,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '退款失败');
-      alert('退款成功，金额将原路退回');
-      load();
-    } catch (e: any) {
-      alert(e.message || '退款失败');
-    }
-  }
+  const refund = useMutation({
+    mutationFn: (orderId: number) => api.post(`/go/payment/refund/${orderId}`),
+    onSuccess: () => {
+      ordersQuery.refetch();
+      toast.show('退款成功，金额将原路退回');
+    },
+    onError: (e: any) => toast.show(e?.response?.data?.error || '退款失败'),
+  });
 
   function logout() {
     localStorage.removeItem('customerToken');
     localStorage.removeItem('customerUser');
+    clearCustomerAuth();
     router.push('/');
   }
+
+  const orders = ordersQuery.data || [];
+  const browse = historyQuery.data || [];
+  const chat = chatQuery.data || [];
+  const coupons = (couponsQuery.data || []).filter((c) => c.status === 0);
+  const loading = guardOk && (
+    ordersQuery.isLoading ||
+    historyQuery.isLoading ||
+    chatQuery.isLoading ||
+    couponsQuery.isLoading
+  );
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -155,9 +103,7 @@ export default function AccountPage() {
       <main className="container mx-auto max-w-3xl px-4 py-6">
         <div className="xcard p-6 mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center text-2xl">
-              👤
-            </div>
+            <div className="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center text-2xl">👤</div>
             <div>
               <h1 className="serif text-xl font-semibold">{profile?.name || '顾客'}</h1>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>{profile?.phone || ''}</p>
@@ -176,12 +122,7 @@ export default function AccountPage() {
           ).map(([key, label]) => (
             <button
               key={key}
-              onClick={() => {
-                setTab(key);
-                const url = new URL(window.location.href);
-                url.searchParams.set('tab', key);
-                window.history.replaceState({}, '', url.toString());
-              }}
+              onClick={() => setTab(key)}
               className={`flex-1 py-2 rounded-full text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
                 tab === key ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
               }`}
@@ -199,35 +140,7 @@ export default function AccountPage() {
           ) : (
             <div className="space-y-3">
               {orders.map((o) => (
-                <div key={o.id} className="xcard p-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-500">订单号 {o.number || o.id}</span>
-                    <span className="font-medium" style={{ color: 'var(--accent)' }}>
-                      {STATUS_TEXT[o.status || 0] || `状态 ${o.status}`}
-                    </span>
-                  </div>
-                  <div className="text-sm space-y-1" style={{ color: 'var(--fg-soft)' }}>
-                    {(o.orderDetails || []).map((d, i) => (
-                      <div key={i}>
-                        {d.name} × {d.number}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <div>
-                      {o.payStatus === 1 && (
-                        <button
-                          onClick={() => refund(o)}
-                          className="pill !h-8 !px-4 !text-xs"
-                          style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent' }}
-                        >
-                          申请退款
-                        </button>
-                      )}
-                    </div>
-                    <div className="font-bold">¥{Number(o.amount || 0).toFixed(2)}</div>
-                  </div>
-                </div>
+                <OrderRow key={o.id} order={o} onRefund={(id) => refund.mutate(id)} pending={refund.isPending} />
               ))}
             </div>
           )
@@ -260,26 +173,14 @@ export default function AccountPage() {
           ) : (
             <div className="space-y-3">
               {coupons.map((c) => (
-                <div
-                  key={c.id}
-                  className={`xcard p-4 flex justify-between items-center ${
-                    c.status === 1 ? 'opacity-60' : ''
-                  }`}
-                >
+                <div key={c.id} className="xcard p-4 flex justify-between items-center">
                   <div>
                     <div className="font-medium">{c.coupon?.title || '优惠券'}</div>
                     <div className="text-sm" style={{ color: 'var(--muted)' }}>
-                      满 ¥{Number(c.coupon?.threshold || 0).toFixed(2)} 减 ¥
-                      {Number(c.coupon?.amount || 0).toFixed(2)}
+                      满 ¥{Number(c.coupon?.threshold || 0).toFixed(2)} 减 ¥{Number(c.coupon?.amount || 0).toFixed(2)}
                     </div>
                   </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs ${
-                      c.status === 1 ? 'bg-gray-200 text-gray-500' : 'pill-soft'
-                    }`}
-                  >
-                    {c.status === 1 ? '已使用' : '未使用'}
-                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs pill-soft">未使用</span>
                 </div>
               ))}
             </div>
@@ -289,10 +190,7 @@ export default function AccountPage() {
         ) : (
           <div className="space-y-3">
             {chat.map((m) => (
-              <div
-                key={m.id}
-                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
                     m.role === 'user'
@@ -308,6 +206,43 @@ export default function AccountPage() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function OrderRow({ order, onRefund, pending }: { order: Order; onRefund: (id: number) => void; pending: boolean }) {
+  return (
+    <div className="xcard p-4">
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-500">订单号 {order.number || order.id}</span>
+        <span className="font-medium" style={{ color: 'var(--accent)' }}>
+          {STATUS_TEXT[order.status || 0] || `状态 ${order.status}`}
+        </span>
+      </div>
+      <div className="text-sm space-y-1" style={{ color: 'var(--fg-soft)' }}>
+        {(order.orderDetails || []).map((d, i) => (
+          <div key={i}>
+            {d.name} × {d.number}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between items-center mt-2">
+        <div>
+          {order.payStatus === 1 && (
+            <button
+              onClick={() => {
+                if (confirm(`确认对订单 ${order.number || order.id} 发起退款吗？`)) onRefund(order.id);
+              }}
+              disabled={pending}
+              className="pill !h-8 !px-4 !text-xs"
+              style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent' }}
+            >
+              申请退款
+            </button>
+          )}
+        </div>
+        <div className="font-bold">¥{Number(order.amount || 0).toFixed(2)}</div>
+      </div>
     </div>
   );
 }

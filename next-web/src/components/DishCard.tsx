@@ -1,16 +1,6 @@
 'use client';
 
-export interface Dish {
-  id: number;
-  name: string;
-  categoryId: number;
-  price: number | string;
-  image?: string;
-  description?: string;
-  rating?: number;
-  sales?: number;
-  status?: number;
-}
+import type { Dish } from '@/types';
 
 interface DishCardProps {
   dish: Dish;

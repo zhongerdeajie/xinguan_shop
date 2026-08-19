@@ -1,94 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Header from '@/components/Header';
+import { useEmployeesQuery, useEmployeeMutations } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import { useToast } from '@/lib/use-toast';
+import type { Employee } from '@/types';
 
-interface Employee {
-  id: number;
+interface EmployeeForm {
   name: string;
   username: string;
-  phone?: string;
-  sex?: string;
+  password: string;
+  phone: string;
+  sex: string;
   status: number;
-  createTime?: string;
 }
 
+const empty: EmployeeForm = { name: '', username: '', password: '', phone: '', sex: '', status: 1 };
+
 export default function EmployeesPage() {
-  const router = useRouter();
-  const [list, setList] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
+  useAdminGuard();
+  const { data: list = [], isLoading: loading } = useEmployeesQuery();
+  const { create, update, remove } = useEmployeeMutations();
+  const toast = useToast();
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    username: '',
-    password: '',
-    phone: '',
-    sex: '',
-    status: 1,
-  });
+  const [form, setForm] = useState<EmployeeForm>(empty);
 
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  async function load() {
-    try {
-      const res = await fetch('/api/employees?page=1&limit=100', { headers: authHeaders() });
-      const data = await res.json();
-      setList(data.data || []);
-    } finally {
-      setLoading(false);
-    }
+  function openCreate() {
+    setEditing(null);
+    setForm(empty);
+    setShowModal(true);
   }
-
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    load();
-  }, []);
-
+  function openEdit(e: Employee) {
+    setEditing(e);
+    setForm({
+      name: e.name,
+      username: e.username,
+      password: '',
+      phone: e.phone || '',
+      sex: e.sex || '',
+      status: e.status,
+    });
+    setShowModal(true);
+  }
   async function save() {
-    const headers = { ...authHeaders(), 'Content-Type': 'application/json' };
-    let res;
-    if (editing) {
-      const body: any = { name: form.name, phone: form.phone, sex: form.sex, status: form.status };
-      if (form.password) body.password = form.password;
-      res = await fetch(`/api/employees/${editing.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
-    } else {
-      res = await fetch('/api/employees', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(form),
-      });
-    }
-    if (res.ok) {
+    try {
+      if (editing) {
+        const body: Record<string, unknown> = { name: form.name, phone: form.phone, sex: form.sex, status: form.status };
+        if (form.password) body.password = form.password;
+        await update.mutateAsync({ id: editing.id, body });
+      } else {
+        const body: Record<string, unknown> = { ...form };
+        await create.mutateAsync(body);
+      }
       setShowModal(false);
       setEditing(null);
-      setForm({ name: '', username: '', password: '', phone: '', sex: '', status: 1 });
-      load();
-    } else {
-      alert('保存失败，用户名可能已存在');
+      toast.show('已保存');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '保存失败，用户名可能已存在');
     }
   }
-
-  async function remove(id: number) {
+  async function onRemove(id: number) {
     if (!confirm('确定删除这个员工吗？')) return;
-    const res = await fetch(`/api/employees/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) load();
+    try {
+      await remove.mutateAsync(id);
+      toast.show('已删除');
+    } catch (e: any) {
+      toast.show(e?.response?.data?.message || '删除失败');
+    }
   }
-
-  async function toggleStatus(e: Employee) {
-    const res = await fetch(`/api/employees/${e.id}`, {
-      method: 'PUT',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: e.status === 1 ? 0 : 1 }),
-    });
-    if (res.ok) load();
+  async function onToggle(e: Employee) {
+    try {
+      await update.mutateAsync({ id: e.id, body: { status: e.status === 1 ? 0 : 1 } });
+    } catch (err: any) {
+      toast.show(err?.response?.data?.message || '更新失败');
+    }
   }
 
   return (
@@ -97,16 +85,7 @@ export default function EmployeesPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="atitle">员工管理</h1>
-          <button
-            onClick={() => {
-              setEditing(null);
-              setForm({ name: '', username: '', password: '', phone: '', sex: '', status: 1 });
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            + 新增员工
-          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">+ 新增员工</button>
         </div>
         <div className="apanel overflow-x-auto">
           <table className="w-full text-sm">
@@ -131,7 +110,8 @@ export default function EmployeesPage() {
                   <td className="px-4 py-3">{e.sex || '-'}</td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => toggleStatus(e)}
+                      onClick={() => onToggle(e)}
+                      disabled={update.isPending}
                       className={`px-2 py-1 rounded-full text-xs ${
                         e.status === 1 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
                       }`}
@@ -140,26 +120,8 @@ export default function EmployeesPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    <button
-                      onClick={() => {
-                        setEditing(e);
-                        setForm({
-                          name: e.name,
-                          username: e.username,
-                          password: '',
-                          phone: e.phone || '',
-                          sex: e.sex || '',
-                          status: e.status,
-                        });
-                        setShowModal(true);
-                      }}
-                      className="text-primary-600 hover:underline"
-                    >
-                      编辑
-                    </button>
-                    <button onClick={() => remove(e.id)} className="text-red-500 hover:underline">
-                      删除
-                    </button>
+                    <button onClick={() => openEdit(e)} className="text-primary-600 hover:underline">编辑</button>
+                    <button onClick={() => onRemove(e.id)} disabled={remove.isPending} className="text-red-500 hover:underline">删除</button>
                   </td>
                 </tr>
               ))}
@@ -213,15 +175,8 @@ export default function EmployeesPage() {
               </select>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">
-                取消
-              </button>
-              <button
-                onClick={save}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
-                保存
-              </button>
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500">取消</button>
+              <button onClick={save} disabled={create.isPending || update.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">保存</button>
             </div>
           </div>
         </div>

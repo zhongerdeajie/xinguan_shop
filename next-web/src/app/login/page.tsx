@@ -2,58 +2,61 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
 import { authAPI } from '@/lib/api';
+import { useToast } from '@/lib/use-toast';
+import { useAuthStore } from '@/lib/stores';
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const toast = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const res: any = await authAPI.login(username, password);
-      if (res.token) {
+  const login = useMutation({
+    mutationFn: () => authAPI.login(username, password),
+    onSuccess: (res: any) => {
+      if (res?.token) {
         localStorage.setItem('token', res.token);
         localStorage.setItem('user', JSON.stringify(res.user));
-        // 不再写入 cookie,完全靠 Authorization header 鉴权(防 CSRF)
+        // 同步一份到 store（避免首页 SSR 渲染时取不到）
+        useAuthStore.setState({ adminToken: res.token, adminUser: res.user });
         router.push('/dashboard');
+      } else {
+        toast.show('登录响应缺少 token');
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || '登录失败，请检查用户名和密码');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    onError: (err: any) => {
+      toast.show(err?.response?.data?.message || '登录失败，请检查用户名和密码');
+    },
+  });
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    login.mutate();
+  }
 
   return (
-<div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-md">
-<div className="xcard p-8 w-full max-w-md">
+        <div className="xcard p-8 w-full max-w-md">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
               <span className="text-3xl">🍜</span>
             </div>
-<h1 className="serif text-2xl font-semibold" style={{ color: 'var(--accent)' }}>星选管家</h1>
-<p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>管理员登录 · Admin Console</p>
+            <h1 className="serif text-2xl font-semibold" style={{ color: 'var(--accent)' }}>星选管家</h1>
+            <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>管理员登录 · Admin Console</p>
           </div>
 
-          {error && (
+          {login.isError && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
+              {toast.message || '登录失败，请检查用户名和密码'}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={onSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                用户名
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">用户名</label>
               <input
                 type="text"
                 value={username}
@@ -65,9 +68,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                密码
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">密码</label>
               <input
                 type="password"
                 value={password}
@@ -80,10 +81,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={login.isPending}
               className="pill pill-accent w-full !h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {login.isPending ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />

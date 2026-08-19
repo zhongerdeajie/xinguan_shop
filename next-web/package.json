@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
-    "test": "jest"
+    "test": "jest",
+    "test:cart": "node --test --experimental-strip-types src/lib/__tests__/cart-storage.pure.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.50.0",
@@ -22,6 +24,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.101.4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.20.1",
     "@types/react": "^18.3.0",

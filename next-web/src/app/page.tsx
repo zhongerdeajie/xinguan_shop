@@ -1,7 +1,5 @@
-import HomeClient, { type Category } from '@/components/HomeClient';
-import type { Dish as DishCardData } from '@/components/DishCard';
-
-type Dish = DishCardData;
+import HomeClient from '@/components/HomeClient';
+import type { Category, Dish } from '@/types';
 
 // 服务端组件:数据在服务器取好,直接塞进首屏 HTML
 // - SEO 友好:爬虫拿到 HTML 就能看到菜品

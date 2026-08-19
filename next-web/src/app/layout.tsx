@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { ToastHost } from '@/components/Toast';
+import QueryProvider from '@/providers/QueryProvider';
+import AuthHydrator from '@/providers/AuthHydrator';
 
 export const metadata: Metadata = {
   title: '星选 AI 购物管家',
@@ -23,7 +25,9 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {children}
+        <QueryProvider>
+          <AuthHydrator>{children}</AuthHydrator>
+        </QueryProvider>
         <ToastHost />
       </body>
     </html>

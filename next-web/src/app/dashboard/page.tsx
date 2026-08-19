@@ -1,48 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import { dashboardAPI } from '@/lib/api';
+import { useDashboardStatsQuery } from '@/lib/queries';
+import { useAdminGuard } from '@/lib/guards';
+import type { DashboardStats } from '@/types';
 
-interface DashboardStats {
-  totalOrders: number;
-  totalDishes: number;
-  totalUsers: number;
-  todayRevenue: number;
-  trend?: { date: string; count: number }[];
-  topDishes?: { name: string; sales: number }[];
-}
+const DEFAULT_STATS: DashboardStats = {
+  totalOrders: 0,
+  totalDishes: 0,
+  totalUsers: 0,
+  todayRevenue: 0,
+  trend: [],
+  topDishes: [],
+};
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalOrders: 0,
-    totalDishes: 0,
-    totalUsers: 0,
-    todayRevenue: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const res: any = await dashboardAPI.getStats();
-      setStats(res);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useAdminGuard();
+  const { data, isLoading: loading } = useDashboardStatsQuery();
+  const stats: DashboardStats = data ?? DEFAULT_STATS;
 
   return (
     <div className="min-h-screen md:pl-60" style={{ background: 'var(--bg)' }}>
@@ -146,15 +121,14 @@ function StatCard({ title, value, icon }: { title: string; value: number | strin
 }
 
 function QuickAction({ href, label, icon }: { href: string; label: string; icon: string }) {
-  const router = useRouter();
   return (
-    <button
-      onClick={() => router.push(href)}
+    <a
+      href={href}
       className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
     >
       <span className="text-xl">{icon}</span>
       <span className="text-gray-700">{label}</span>
-    </button>
+    </a>
   );
 }
 

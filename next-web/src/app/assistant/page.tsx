@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useMutation } from '@tanstack/react-query';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { CustomerNav, NavBackLink } from '@/components/CustomerNav';
 import { CompactDishRow } from '@/components/CompactDishRow';
+import { useAuthStore, useCartStore } from '@/lib/stores';
+import { useToast } from '@/lib/use-toast';
+import api from '@/lib/api';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -37,6 +41,11 @@ const T = {
 };
 
 export default function AssistantPage() {
+  const customerToken = useAuthStore((s) => s.customerToken);
+  const addGuest = useCartStore((s) => s.add);
+  const toast = useToast();
+  void addGuest;
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
@@ -53,15 +62,14 @@ export default function AssistantPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 加载本地缓存的未登录聊天记录
     const cached = localStorage.getItem('guestChatHistory');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 1) {
-          setMessages(parsed);
-        }
-      } catch {}
+        if (Array.isArray(parsed) && parsed.length > 1) setMessages(parsed);
+      } catch {
+        /* ignore */
+      }
     }
   }, []);
 
@@ -69,23 +77,19 @@ export default function AssistantPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const t = T;
-
   async function send(text?: string) {
     const content = (text ?? input).trim();
     if (!content || loading) return;
-
     setInput('');
     setOrderMsg('');
     setOrderSuggestion(null);
     setMessages((prev) => [...prev, { role: 'user', content }]);
     setLoading(true);
 
+    let intentLabel = '';
     try {
-      const customerToken = localStorage.getItem('customerToken');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (customerToken) headers.Authorization = `Bearer ${customerToken}`;
-      // 流式（SSE）调用：使用 /api/ai/chat/stream,后端通过 nginx 透传 text/event-stream
       const res = await fetch('/api/ai/chat/stream', {
         method: 'POST',
         headers,
@@ -95,24 +99,15 @@ export default function AssistantPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-
-      // 先放一个空的 assistant 消息占位,后续流式追加
-      const assistantIndex = messages.length + 1; // user 已 push,assistant 在末尾
-      let intentLabel = '';
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: '', intent: '' },
-      ]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: '', intent: '' }]);
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        // SSE 事件以 "\n\n" 分隔
         const events = buffer.split('\n\n');
         buffer = events.pop() || '';
         for (const evt of events) {
-          // 只处理 data: 行
           const lines = evt.split('\n').filter((l) => l.startsWith('data:'));
           if (!lines.length) continue;
           const payload = lines.map((l) => l.slice(5).trim()).join('\n');
@@ -122,7 +117,6 @@ export default function AssistantPage() {
             if (data.type === 'meta') {
               intentLabel = data.agent || data.intent || '';
             } else if (data.type === 'chunk') {
-              // 流式追加一字符
               setMessages((prev) => {
                 const next = [...prev];
                 const last = next[next.length - 1];
@@ -131,32 +125,24 @@ export default function AssistantPage() {
                 }
                 return next;
               });
-            } else if (data.type === 'done') {
-              // 流结束,可拿到 order_suggestion 但要回头拿 meta 里的;这里没有,留空
-              // 实际上我们在 meta 已经发送了,无需再处理
+            } else if (data.type === 'order_suggest') {
+              setOrderSuggestion({ items: data.items, total: data.total });
             }
           } catch {
-            // ignore malformed line
+            /* ignore malformed */
           }
         }
       }
-      // 流结束后,如果最后一条是空 assistant,保留;否则不动
-      const finalAssistant = (() => {
-        const all = [] as typeof messages;
-        // get latest from state via callback chain would need useRef; rely on next render
-        return null;
-      })();
-      // 未登录时把完整对话缓存到 localStorage
+
       if (!customerToken) {
         setMessages((prev) => {
           localStorage.setItem('guestChatHistory', JSON.stringify(prev));
           return prev;
         });
       } else {
-        const cached = localStorage.getItem('guestChatHistory');
-        if (cached) localStorage.removeItem('guestChatHistory');
+        localStorage.removeItem('guestChatHistory');
       }
-    } catch (e) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'AI 服务暂时不可用，请稍后重试。' },
@@ -166,61 +152,39 @@ export default function AssistantPage() {
     }
   }
 
-  async function confirmOrder() {
-    if (!orderSuggestion || ordering) return;
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      window.location.href = '/account/login';
-      return;
-    }
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    };
-    setOrdering(true);
-    try {
-      const addrRes = await fetch('/go/addresses', { headers });
-      const addrData = await addrRes.json();
-      const address = (addrData.data || [])[0];
+  const confirmOrder = useMutation({
+    mutationFn: async () => {
+      if (!orderSuggestion) throw new Error('没有可下单的方案');
+      const headers = { Authorization: `Bearer ${customerToken}`, 'Content-Type': 'application/json' };
+      const addrRes: any = await api.get('/go/addresses');
+      const address = (addrRes.data?.data || [])[0];
       if (!address) throw new Error('没有收货地址');
-
       for (const item of orderSuggestion.items) {
-        const addRes = await fetch('/go/cart/add', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ dishId: item.dishId, number: item.number }),
-        });
-        if (!addRes.ok) throw new Error('加入购物车失败');
+        const r: any = await api.post('/go/cart/add', { dishId: item.dishId, number: item.number });
+        if (!r.status.toString().startsWith('2')) throw new Error('加入购物车失败');
       }
-      const orderRes = await fetch('/go/orders/submit', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ addressBookId: address.id, remark: 'AI 下单', payMethod: 1 }),
-      });
-      const orderData = await orderRes.json();
-      if (!orderRes.ok) throw new Error(orderData.error || '下单失败');
-
-      const payRes = await fetch('/go/payment/pay', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ orderNumber: orderData.data.orderNumber, payMethod: 1 }),
-      });
-      if (!payRes.ok) throw new Error('支付失败');
-
+      const orderRes: any = await api.post('/go/orders/submit', { addressBookId: address.id, remark: 'AI 下单', payMethod: 1 });
+      if (!orderRes.status.toString().startsWith('2')) throw new Error(orderRes.data?.error || '下单失败');
+      const orderNumber = orderRes.data?.data?.orderNumber || orderRes.data?.orderNumber;
+      const payRes: any = await api.post('/go/payment/pay', { orderNumber, payMethod: 1 });
+      if (!payRes.status.toString().startsWith('2')) throw new Error('支付失败');
+    },
+    onMutate: () => setOrdering(true),
+    onSuccess: () => {
       setOrderSuggestion(null);
-      setOrderMsg(t.ordered);
-    } catch (e: any) {
-      setOrderMsg(e.message || '下单失败');
-    } finally {
+      setOrderMsg(T.ordered);
       setOrdering(false);
-    }
-  }
+    },
+    onError: (e: any) => {
+      setOrderMsg(e?.message || '下单失败');
+      setOrdering(false);
+    },
+  });
 
   function toggleMic() {
-    const SR =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      alert('当前浏览器不支持语音识别，请使用 Chrome 或 Edge');
+      toast.show('当前浏览器不支持语音识别，请使用 Chrome 或 Edge');
       return;
     }
     const rec = new SR();
@@ -238,7 +202,7 @@ export default function AssistantPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
-      <CustomerNav rightSlot={<NavBackLink label={t.back} />} />
+      <CustomerNav rightSlot={<NavBackLink label={T.back} />} />
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 space-y-4">
         {messages.map((m, i) => (
@@ -278,11 +242,15 @@ export default function AssistantPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="mono font-semibold" style={{ color: 'var(--accent)' }}>
-                {t.confirm}
+                {T.confirm}
                 {orderSuggestion.total.toFixed(2)}
               </span>
-              <button onClick={confirmOrder} disabled={ordering} className="pill pill-accent">
-                {ordering ? t.ordering : t.send}
+              <button
+                onClick={() => confirmOrder.mutate()}
+                disabled={ordering || !customerToken}
+                className="pill pill-accent"
+              >
+                {ordering ? T.ordering : T.send}
               </button>
             </div>
             {orderMsg && (
@@ -305,7 +273,7 @@ export default function AssistantPage() {
               className="px-4 py-3 text-sm"
               style={{ background: 'var(--bg-deep)', borderRadius: 16, borderTopLeftRadius: 6 }}
             >
-              {t.thinking}
+              {T.thinking}
             </div>
           </div>
         )}
@@ -327,13 +295,13 @@ export default function AssistantPage() {
             ))}
           </div>
           <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-            {typeof window !== 'undefined' && localStorage.getItem('customerToken') ? (
+            {customerToken ? (
               <Link href="/account?tab=chat" style={{ color: 'var(--accent)' }}>
-                {t.saved}
+                {T.saved}
               </Link>
             ) : (
               <Link href="/account/login" style={{ color: 'var(--accent)' }}>
-                {t.loginHint}
+                {T.loginHint}
               </Link>
             )}
           </div>
@@ -342,7 +310,7 @@ export default function AssistantPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
-              placeholder={t.placeholder}
+              placeholder={T.placeholder}
               disabled={loading}
               className="flex-1 min-w-0 px-4 md:px-5 py-3 rounded-full border focus:outline-none"
               style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
@@ -364,7 +332,7 @@ export default function AssistantPage() {
               disabled={loading || !input.trim()}
               className="pill pill-accent !h-12 !px-5 md:!px-6 shrink-0"
             >
-              {t.send}
+              {T.send}
             </button>
           </div>
         </div>
@@ -372,3 +340,5 @@ export default function AssistantPage() {
     </div>
   );
 }
+
+// avoid unused-vars (addGuest is reserved for inline "加入购物车" button)
