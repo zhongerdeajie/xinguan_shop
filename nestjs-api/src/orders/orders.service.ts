@@ -129,11 +129,15 @@ export class OrdersService {
     });
   }
 
-  async update(id: number, data: any) {
+  async update(id: number, data: any, operatorId?: number) {
     await this.findOne(id);
     return this.prisma.orders.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        // 审计：记录本次修改的操作人（管理员 userId）
+        ...(operatorId ? { updateUser: operatorId, updateTime: new Date() } : {}),
+      },
       include: {
         user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
@@ -142,17 +146,21 @@ export class OrdersService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, operatorId?: number) {
     await this.findOne(id);
     await this.prisma.orderDetail.deleteMany({
       where: { orderId: id },
     });
+    // 删除前最后一次审计日志（注意：prisma.orders.delete 不接受 updateUser 字段，这里只做日志记录）
+    if (operatorId) {
+      console.log(`[AUDIT] admin ${operatorId} deleted order ${id} at ${new Date().toISOString()}`);
+    }
     return this.prisma.orders.delete({
       where: { id },
     });
   }
 
-  async updateStatus(id: number, targetStatus: number, extraData?: Record<string, unknown>) {
+  async updateStatus(id: number, targetStatus: number, extraData?: Record<string, unknown>, operatorId?: number) {
     const order = await this.findOne(id);
     const currentStatus = order.status;
 
@@ -185,6 +193,12 @@ export class OrdersService {
       Object.assign(updateData, extraData);
     }
 
+    // 审计：记录本次状态变更的操作人
+    if (operatorId) {
+      updateData.updateUser = operatorId;
+      updateData.updateTime = new Date();
+    }
+
     return this.prisma.orders.update({
       where: { id },
       data: updateData,
@@ -196,24 +210,24 @@ export class OrdersService {
     });
   }
 
-  async pay(id: number, payMethod: number = 1) {
-    return this.updateStatus(id, ORDER_STATUS.PENDING_ACCEPT, { payMethod, payStatus: 1 });
+  async pay(id: number, payMethod: number = 1, operatorId?: number) {
+    return this.updateStatus(id, ORDER_STATUS.PENDING_ACCEPT, { payMethod, payStatus: 1 }, operatorId);
   }
 
-  async accept(id: number) {
-    return this.updateStatus(id, ORDER_STATUS.ACCEPTED);
+  async accept(id: number, operatorId?: number) {
+    return this.updateStatus(id, ORDER_STATUS.ACCEPTED, undefined, operatorId);
   }
 
-  async startDelivery(id: number) {
-    return this.updateStatus(id, ORDER_STATUS.DELIVERING);
+  async startDelivery(id: number, operatorId?: number) {
+    return this.updateStatus(id, ORDER_STATUS.DELIVERING, undefined, operatorId);
   }
 
-  async complete(id: number) {
-    return this.updateStatus(id, ORDER_STATUS.COMPLETED);
+  async complete(id: number, operatorId?: number) {
+    return this.updateStatus(id, ORDER_STATUS.COMPLETED, undefined, operatorId);
   }
 
-  async cancel(id: number, reason?: string) {
-    return this.updateStatus(id, ORDER_STATUS.CANCELLED, { cancelReason: reason });
+  async cancel(id: number, reason?: string, operatorId?: number) {
+    return this.updateStatus(id, ORDER_STATUS.CANCELLED, { cancelReason: reason }, operatorId);
   }
 
   async getStatistics(params?: { startDate?: Date; endDate?: Date }) {

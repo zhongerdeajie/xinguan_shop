@@ -9,6 +9,7 @@ import (
 	"go-service/internal/app/appdeps"
 	"go-service/internal/model"
 	pkgmysql "go-service/internal/pkg/mysql"
+	pkgpagination "go-service/internal/pkg/pagination"
 )
 
 // Handler is the per-request state needed by employee endpoints.
@@ -23,11 +24,30 @@ func NewHandler(db *pkgmysql.DB, svcs appdeps.Services) *Handler {
 	return &Handler{db: db, svcs: svcs}
 }
 
-// List returns every employee in the table. No pagination is enforced yet.
+// List returns a paginated list of employees.
+// Sensitive fields like IDNumber are masked before being sent to the client.
 func (h *Handler) List(c *gin.Context) {
+	offset, limit := pkgpagination.ParsePaging(c)
+
 	var employees []model.Employee
-	h.db.Find(&employees)
-	c.JSON(200, gin.H{"data": employees})
+	var total int64
+	h.db.Model(&model.Employee{}).Count(&total)
+	h.db.Offset(offset).Limit(limit).Order("id DESC").Find(&employees)
+
+	// Mask sensitive fields before serializing.
+	for i := range employees {
+		employees[i].IDNumber = pkgpagination.MaskIDNumber(employees[i].IDNumber)
+	}
+
+	c.JSON(200, gin.H{
+		"data": employees,
+		"meta": gin.H{
+			"total":      total,
+			"page":       offset/limit + 1,
+			"pageSize":   limit,
+			"totalPages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
 }
 
 // Create persists a new employee.

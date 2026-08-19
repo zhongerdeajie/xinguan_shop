@@ -1,0 +1,45 @@
+[PASS] 闲聊[你好] intent=chitchat agent=chitchat resp=你好！我是星选 AI 点餐助手 🤖 可以帮你： • 🍽️ 推荐菜品（说『推荐几个
+[PASS] 闲聊[你是谁] intent=chitchat agent=chitchat resp=我是星选 AI 点餐助手 🤖 基于智谱 GLM 大模型，我可以帮你： • 推荐评
+[PASS] 闲聊[谢谢] intent=chitchat agent=chitchat resp=不客气！有需要随时找我 😊
+[PASS] 闲聊[再见] intent=chitchat agent=chitchat resp=再见！欢迎下次再来点餐 🥡
+[PASS] 闲聊[?] intent=chitchat agent=chitchat resp=我在的！您可以直接告诉我你想吃什么、预算多少，我会帮你推荐、凑单和比价。
+[PASS] 闲聊[？？] intent=chitchat agent=chitchat resp=我在的！您可以直接告诉我你想吃什么、预算多少，我会帮你推荐、凑单和比价。
+[PASS] 闲聊[什么玩意] intent=chitchat agent=chitchat resp=我在的！您可以直接告诉我你想吃什么、预算多少，我会帮你推荐、凑单和比价。
+[PASS] 闲聊[在吗] intent=chitchat agent=chitchat resp=你好！我是星选 AI 点餐助手 🤖 可以帮你： • 🍽️ 推荐菜品（说『推荐几个
+[PASS] 闲聊[嗨] intent=chitchat agent=chitchat resp=你好！我是星选 AI 点餐助手 🤖 可以帮你： • 🍽️ 推荐菜品（说『推荐几个
+[PASS] 下单[我要一份拍黄瓜] intent=nl_order resp=抱歉，没找到「拍黄瓜」这些菜。您可以换个说法，或者说『推荐几个菜』让我帮您挑。
+[PASS] 下单[我想吃辣椒炒肉] intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 -
+[PASS] 下单[来两个酸梅汤] intent=nl_order resp=抱歉，没找到「酸梅汤」这些菜。您可以换个说法，或者说『推荐几个菜』让我帮您挑。
+[PASS] 下单[下单一份米饭] intent=nl_order resp=抱歉，没找到「米饭」这些菜。您可以换个说法，或者说『推荐几个菜』让我帮您挑。
+[PASS] 业务[推荐几个菜]=>recommend got=recommend
+[PASS] 业务[有什么好吃的]=>recommend got=recommend
+[PASS] 业务[预算50元帮我凑单]=>smart_bargain got=smart_bargain
+[PASS] 业务[满减怎么凑]=>smart_bargain got=smart_bargain
+[PASS] 业务[辣椒炒肉贵不贵]=>price_compare got=price_compare
+[PASS] 业务[我要退款]=>aftersales got=aftersales
+[PASS] 业务[少送了一个菜]=>aftersales got=aftersales
+[PASS] 业务[搞个满减活动]=>marketing got=marketing
+[PASS] 边界[''] intent=chitchat
+[PASS] 边界[' '] intent=chitchat
+[PASS] 边界['a'] intent=chitchat
+[PASS] 边界['1'] intent=chitchat
+[PASS] 边界['！！！'] intent=chitchat
+[PASS] 边界['🤣'] intent=chitchat
+[PASS] 边界['abcdefghijk'] intent=out_of_scope
+[PASS] 边界['xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] intent=out_of_scope
+[PASS] 记忆R1推荐 intent=recommend
+[PASS] 记忆R2第一个 intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 + 0 素 + 0 
+[PASS] 记忆R3新会话 intent=recommend
+[PASS] 指代[选第一个] intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 
+[PASS] 指代[就第一个吧] intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 
+[PASS] 指代[它叫什么] intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 
+[PASS] 指代[再加一份] intent=nl_order resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 
+[PASS] 结构[intent] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[agent] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[response] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[entities] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[tools_used] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[order_suggestion] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+[PASS] 结构[error] r.keys()=['intent', 'agent', 'response', 'entities', 'tools_used', 'order_suggestion', 'error', 'intent_confidence', 'intent_method']
+
+===== 汇总: PASS=43 FAIL=0 =====

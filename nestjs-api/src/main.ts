@@ -28,8 +28,24 @@ async function bootstrap() {
   // 全局校验
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  // CORS
-  app.enableCors({ origin: '*', credentials: true });
+  // CORS：白名单 origin，允许带凭证（cookie）
+  // 注意：origin: '*' 和 credentials: true 不能同时使用（浏览器规范禁止）
+  const allowedOrigins = [
+    'http://localhost:3001', // 本地开发：Next.js
+    'http://localhost:3000', // 本地开发：直接访问 NestJS
+    process.env.WEB_ORIGIN, // 生产环境前端域名（通过环境变量配置）
+  ].filter(Boolean) as string[];
+  app.enableCors({
+    origin: (origin, callback) => {
+      // 允许未带 Origin 的请求（同源请求、curl、Postman、服务器间调用）
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} 不在白名单`), false);
+      }
+    },
+    credentials: true,
+  });
 
   // Swagger 文档
   const config = new DocumentBuilder()

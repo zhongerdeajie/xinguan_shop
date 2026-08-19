@@ -278,6 +278,8 @@ model Orders {
   packAmount            Int?      @map("pack_amount")
   tablewareNumber       Int?      @map("tableware_number")
   tablewareStatus       Int       @default(1) @map("tableware_status")
+  updateUser            Int?      @map("update_user")
+  updateTime            DateTime? @map("update_time") @db.DateTime
 
   user         User           @relation(fields: [userId], references: [id])
   addressBook  AddressBook    @relation(fields: [addressBookId], references: [id])

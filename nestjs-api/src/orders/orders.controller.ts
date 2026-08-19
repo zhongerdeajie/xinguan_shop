@@ -81,15 +81,17 @@ export class OrdersController {
   @Put(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '更新订单' })
-  async update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
-    return this.ordersService.update(+id, updateOrderDto);
+  async update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto, @Req() req: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.update(+id, updateOrderDto, operatorId);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '删除订单' })
-  async remove(@Param('id') id: string) {
-    return this.ordersService.remove(+id);
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.remove(+id, operatorId);
   }
 
   // ==================== 订单状态流转 API ====================
@@ -97,43 +99,49 @@ export class OrdersController {
   @Put(':id/pay')
   @UseGuards(CustomerAuthGuard)
   @ApiOperation({ summary: '支付订单 (待付款 → 待接单)' })
-  async pay(@Param('id') id: string, @Body('payMethod') payMethod?: number) {
-    return this.ordersService.pay(+id, payMethod);
+  async pay(@Param('id') id: string, @Body('payMethod') payMethod?: number, @Req() req?: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.pay(+id, payMethod, operatorId);
   }
 
   @Put(':id/accept')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '接单 (待接单 → 已接单)' })
-  async accept(@Param('id') id: string) {
-    return this.ordersService.accept(+id);
+  async accept(@Param('id') id: string, @Req() req: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.accept(+id, operatorId);
   }
 
   @Put(':id/start-delivery')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '开始派送 (已接单 → 派送中)' })
-  async startDelivery(@Param('id') id: string) {
-    return this.ordersService.startDelivery(+id);
+  async startDelivery(@Param('id') id: string, @Req() req: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.startDelivery(+id, operatorId);
   }
 
   @Put(':id/complete')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '完成订单 (派送中 → 已完成)' })
-  async complete(@Param('id') id: string) {
-    return this.ordersService.complete(+id);
+  async complete(@Param('id') id: string, @Req() req: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.complete(+id, operatorId);
   }
 
   @Put(':id/customer-cancel')
   @UseGuards(CustomerAuthGuard)
   @ApiOperation({ summary: '顾客取消订单（顾客专用）' })
-  async customerCancel(@Param('id') id: string, @Body('reason') reason?: string) {
-    return this.ordersService.cancel(+id, reason);
+  async customerCancel(@Param('id') id: string, @Body('reason') reason?: string, @Req() req?: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.cancel(+id, reason, operatorId);
   }
 
   @Put(':id/cancel')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '取消订单（管理员）' })
-  async cancel(@Param('id') id: string, @Body('reason') reason?: string) {
-    return this.ordersService.cancel(+id, reason);
+  async cancel(@Param('id') id: string, @Body('reason') reason?: string, @Req() req?: any) {
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.cancel(+id, reason, operatorId);
   }
 
   @Put(':id/status')
@@ -143,7 +151,9 @@ export class OrdersController {
     @Param('id') id: string,
     @Body('status') status: number,
     @Body() extraData?: Record<string, unknown>,
+    @Req() req?: any,
   ) {
-    return this.ordersService.updateStatus(+id, status, extraData);
+    const operatorId = Number(req?.user?.userId ?? 0);
+    return this.ordersService.updateStatus(+id, status, extraData, operatorId);
   }
 }

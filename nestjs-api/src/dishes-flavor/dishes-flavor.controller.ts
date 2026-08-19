@@ -7,11 +7,13 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateDishFlavorDto, UpdateDishFlavorDto } from './dto';
 
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DishesFlavorService } from './dishes-flavor.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('菜品口味管理')
 @Controller('dishes-flavor')
@@ -39,18 +41,24 @@ export class DishesFlavorController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '创建菜品口味' })
   async create(@Body() createDishFlavorDto: CreateDishFlavorDto) {
     return this.dishesFlavorService.create(createDishFlavorDto);
   }
 
   @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '更新菜品口味' })
   async update(@Param('id') id: string, @Body() updateDishFlavorDto: UpdateDishFlavorDto) {
     return this.dishesFlavorService.update(+id, updateDishFlavorDto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '删除菜品口味' })
   async remove(@Param('id') id: string) {
     return this.dishesFlavorService.remove(+id);

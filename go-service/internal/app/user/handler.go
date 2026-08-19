@@ -9,6 +9,7 @@ import (
 	"go-service/internal/app/appdeps"
 	"go-service/internal/model"
 	pkgmysql "go-service/internal/pkg/mysql"
+	pkgpagination "go-service/internal/pkg/pagination"
 )
 
 // Handler exposes the per-request state for user endpoints.
@@ -22,11 +23,30 @@ func NewHandler(db *pkgmysql.DB, svcs appdeps.Services) *Handler {
 	return &Handler{db: db, svcs: svcs}
 }
 
-// List returns every customer user.
+// List returns a paginated list of customer users.
+// Sensitive fields like IDNumber are masked before being sent to the client.
 func (h *Handler) List(c *gin.Context) {
+	offset, limit := pkgpagination.ParsePaging(c)
+
 	var users []model.User
-	h.db.Find(&users)
-	c.JSON(200, gin.H{"data": users})
+	var total int64
+	h.db.Model(&model.User{}).Count(&total)
+	h.db.Offset(offset).Limit(limit).Order("id DESC").Find(&users)
+
+	// Mask sensitive fields before serializing.
+	for i := range users {
+		users[i].IDNumber = pkgpagination.MaskIDNumber(users[i].IDNumber)
+	}
+
+	c.JSON(200, gin.H{
+		"data": users,
+		"meta": gin.H{
+			"total":     total,
+			"page":      offset/limit + 1,
+			"pageSize":  limit,
+			"totalPages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
 }
 
 // GetByID returns one customer user.
@@ -37,6 +57,8 @@ func (h *Handler) GetByID(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "用户不存在"})
 		return
 	}
+	// Mask sensitive field for single-record response too.
+	user.IDNumber = pkgpagination.MaskIDNumber(user.IDNumber)
 	c.JSON(200, gin.H{"data": user})
 }
 

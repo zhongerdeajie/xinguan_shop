@@ -1,0 +1,9 @@
+'你好'                 intent=chitchat       agent=chitchat     resp=你好！我是星选 AI 点餐助手 🤖 可以帮你： • 🍽️ 推荐菜品（说『推荐几个菜』） • 🛒 自然语言下单（说『我要下单 辣椒炒肉』） •
+'你是谁'                intent=chitchat       agent=chitchat     resp=我是星选 AI 点餐助手 🤖 基于智谱 GLM 大模型，我可以帮你： • 推荐评分最高的菜品 • 用自然语言下单 • 按预算智能凑单 • 查
+'我想吃辣椒炒肉'            intent=nl_order       agent=自然语言下单       resp=我理解您的需求： - 人数：1 人 - 预算：100 元 - 时间：18 点 - 菜品结构：0 荤 + 0 素 + 0 汤  抱歉，没找到符
+'推荐几个菜'              intent=recommend      agent=中立推荐         resp=查询失败，请稍后再试。
+'我要退款'               intent=aftersales     agent=智能售后         resp=查询订单失败，请稍后再试。
+'预算50凑单'             intent=smart_bargain  agent=智能凑单         resp=抱歉，暂时没有适合的凑单品。当前购物车 60 元。
+'谢谢'                 intent=chitchat       agent=chitchat     resp=不客气！有需要随时找我 😊
+'?'                  intent=chitchat       agent=chitchat     resp=我在的！您可以直接告诉我你想吃什么、预算多少，我会帮你推荐、凑单和比价。
+'什么玩意'               intent=chitchat       agent=chitchat     resp=我在的！您可以直接告诉我你想吃什么、预算多少，我会帮你推荐、凑单和比价。

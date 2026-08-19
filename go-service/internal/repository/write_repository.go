@@ -8,6 +8,7 @@ import (
 	"go-service/internal/model"
 	"go-service/internal/pkg/mysql"
 	"go-service/internal/pkg/redis"
+	pkgstrutil "go-service/internal/pkg/strutil"
 	"gorm.io/gorm"
 )
 
@@ -34,6 +35,7 @@ func (r *WriteRepository) CreateEmployee(ctx context.Context, emp *model.Employe
 }
 
 func (r *WriteRepository) UpdateEmployee(ctx context.Context, id int, updates map[string]interface{}) error {
+	pkgstrutil.NormalizeUpdateMap(updates)
 	updates["update_time"] = time.Now()
 	return r.db.WithContext(ctx).Model(&model.Employee{}).Where("id = ?", id).Updates(updates).Error
 }
@@ -50,6 +52,7 @@ func (r *WriteRepository) CreateDish(ctx context.Context, dish *model.Dish) erro
 }
 
 func (r *WriteRepository) UpdateDish(ctx context.Context, id int, updates map[string]interface{}) error {
+	pkgstrutil.NormalizeUpdateMap(updates)
 	updates["update_time"] = time.Now()
 	return r.db.WithContext(ctx).Model(&model.Dish{}).Where("id = ?", id).Updates(updates).Error
 }
@@ -66,6 +69,7 @@ func (r *WriteRepository) CreateSetmeal(ctx context.Context, setmeal *model.Setm
 }
 
 func (r *WriteRepository) UpdateSetmeal(ctx context.Context, id int, updates map[string]interface{}) error {
+	pkgstrutil.NormalizeUpdateMap(updates)
 	updates["update_time"] = time.Now()
 	return r.db.WithContext(ctx).Model(&model.Setmeal{}).Where("id = ?", id).Updates(updates).Error
 }
@@ -82,6 +86,7 @@ func (r *WriteRepository) CreateUser(ctx context.Context, user *model.User) erro
 }
 
 func (r *WriteRepository) UpdateUser(ctx context.Context, id int, updates map[string]interface{}) error {
+	pkgstrutil.NormalizeUpdateMap(updates)
 	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(updates).Error
 }
 
@@ -93,6 +98,7 @@ func (r *WriteRepository) CreateAddressBook(ctx context.Context, addr *model.Add
 }
 
 func (r *WriteRepository) UpdateAddressBook(ctx context.Context, userID, id int, updates map[string]interface{}) error {
+	pkgstrutil.NormalizeUpdateMap(updates)
 	return r.db.WithContext(ctx).Model(&model.AddressBook{}).
 		Where("id = ? AND user_id = ?", id, userID).Updates(updates).Error
 }
