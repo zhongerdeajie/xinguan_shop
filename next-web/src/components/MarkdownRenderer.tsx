@@ -3,10 +3,87 @@
 import React from 'react';
 
 /**
- * 轻量级 Markdown 渲染组件
- * 支持加粗、斜体、标题、无序列表、有序列表、代码块、行内代码、分隔线
+ * 安全的 Markdown 渲染组件
+ *
+ * 安全要点：
+ * 1. 完全使用 React 节点(JSX),不生成 HTML 字符串再 dangerouslySetInnerHTML
+ * 2. React 自动转义所有文本内容
+ * 3. 行内解析只支持 markdown 语法(粗体/斜体/行内代码),不支持 HTML
+ * 4. 对输入文本先做 XSS 黑名单过滤(防御 LLM 投毒)
+ * 5. 不输出 href(防 javascript: 伪协议),如需链接单独处理
  */
-export default function MarkdownRenderer({ content }: { content: string }) {
+
+interface MarkdownRendererProps {
+  content: string;
+}
+
+// XSS 黑名单：检测常见攻击模式
+function detectXss(text: string): boolean {
+  // 1. <script> 标签
+  if (/<script[\s>]/i.test(text)) return true;
+  // 2. <iframe> 标签
+  if (/<iframe[\s>]/i.test(text)) return true;
+  // 3. on* 事件处理器 (onerror, onload, onclick 等)
+  if (/\bon[a-z]+\s*=/i.test(text)) return true;
+  // 4. javascript: 伪协议
+  if (/javascript\s*:/i.test(text)) return true;
+  // 5. data:text/html (可执行 HTML)
+  if (/data\s*:\s*text\/html/i.test(text)) return true;
+  // 6. <embed>/<object>/<svg> 标签
+  if (/<(embed|object|svg|use)[\s>]/i.test(text)) return true;
+  return false;
+}
+
+// 解析行内 markdown:返回 React 节点数组
+// 支持: **粗体** *斜体* `行内代码`
+// 不支持 HTML——所有 < > 都会被 React 自动转义
+function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  // 用正则拆分出 token 类型
+  // 优先级:行内代码 > 粗体 > 斜体
+  const re = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let idx = 0;
+  while ((match = re.exec(text)) !== null) {
+    // 前面的纯文本
+    if (match.index > lastIndex) {
+      nodes.push(<React.Fragment key={`${keyPrefix}-t-${idx++}`}>{text.slice(lastIndex, match.index)}</React.Fragment>);
+    }
+    const token = match[0];
+    if (token.startsWith('`')) {
+      const content = token.slice(1, -1);
+      nodes.push(
+        <code key={`${keyPrefix}-c-${idx++}`} className="px-1 py-0.5 rounded bg-black/5 text-[13px]">
+          {content}
+        </code>
+      );
+    } else if (token.startsWith('**') || token.startsWith('__')) {
+      const content = token.slice(2, -2);
+      nodes.push(<strong key={`${keyPrefix}-b-${idx++}`}>{content}</strong>);
+    } else if (token.startsWith('*') || token.startsWith('_')) {
+      const content = token.slice(1, -1);
+      nodes.push(<em key={`${keyPrefix}-i-${idx++}`}>{content}</em>);
+    }
+    lastIndex = match.index + token.length;
+  }
+  // 剩余文本
+  if (lastIndex < text.length) {
+    nodes.push(<React.Fragment key={`${keyPrefix}-t-${idx}`}>{text.slice(lastIndex)}</React.Fragment>);
+  }
+  return nodes;
+}
+
+export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  // 第一道防线:检测 XSS,命中则返回安全降级内容
+  if (detectXss(content)) {
+    return (
+      <div className="markdown-body text-red-500 text-sm">
+        [已过滤:检测到不安全内容]
+      </div>
+    );
+  }
+
   const lines = content.split('\n');
   const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
@@ -19,7 +96,7 @@ export default function MarkdownRenderer({ content }: { content: string }) {
       elements.push(
         <ul key={key} className="ml-4 my-1 space-y-0.5 list-disc">
           {listItems.map((item, i) => (
-            <li key={i} dangerouslySetInnerHTML={{ __html: parseInline(item) }} />
+            <li key={i}>{renderInline(item, `ul-${key}-${i}`)}</li>
           ))}
         </ul>
       );
@@ -32,27 +109,12 @@ export default function MarkdownRenderer({ content }: { content: string }) {
       elements.push(
         <ol key={key} className="ml-4 my-1 space-y-0.5 list-decimal">
           {orderedListItems.map((item, i) => (
-            <li key={i} dangerouslySetInnerHTML={{ __html: parseInline(item) }} />
+            <li key={i}>{renderInline(item, `ol-${key}-${i}`)}</li>
           ))}
         </ol>
       );
       orderedListItems = [];
     }
-  }
-
-  function parseInline(text: string): string {
-    let html = text;
-    // 转义 HTML
-    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // 加粗 **text** 或 __text__
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-    // 斜体 *text* 或 _text_
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-    // 行内代码 `code`
-    html = html.replace(/`(.+?)`/g, '<code class="px-1 py-0.5 rounded bg-black/5 text-[13px]">$1</code>');
-    return html;
   }
 
   lines.forEach((line, idx) => {
@@ -90,7 +152,9 @@ export default function MarkdownRenderer({ content }: { content: string }) {
       const level = hMatch[1].length;
       const sizes = ['text-lg', 'text-base', 'text-sm', 'text-sm'];
       elements.push(
-        <div key={`h-${idx}`} className={`font-bold ${sizes[level - 1]} my-1`} dangerouslySetInnerHTML={{ __html: parseInline(hMatch[2]) }} />
+        <div key={`h-${idx}`} className={`font-bold ${sizes[level - 1]} my-1`}>
+          {renderInline(hMatch[2], `h-${idx}`)}
+        </div>
       );
       return;
     }
@@ -123,7 +187,9 @@ export default function MarkdownRenderer({ content }: { content: string }) {
     flushUnorderedList(`ul-${idx}`);
     flushOrderedList(`ol-${idx}`);
     elements.push(
-      <p key={`p-${idx}`} className="my-0.5" dangerouslySetInnerHTML={{ __html: parseInline(line) }} />
+      <p key={`p-${idx}`} className="my-0.5">
+        {renderInline(line, `p-${idx}`)}
+      </p>
     );
   });
 

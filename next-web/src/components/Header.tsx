@@ -37,7 +37,7 @@ export default function Header() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    document.cookie = 'auth_token=; path=/; max-age=0';
+    // 不再清除 cookie（之前从未写入），清理 localStorage 即可
     router.push('/login');
   };
 

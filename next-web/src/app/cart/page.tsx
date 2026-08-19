@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  getLocalCart,
+  removeFromLocalCart,
+  updateLocalCartQty,
+  type GuestCartItem,
+} from '@/lib/cart-storage';
+import { CustomerNav, NavBackLink } from '@/components/CustomerNav';
+import { EmptyState } from '@/components/EmptyState';
+import { CompactDishRow } from '@/components/CompactDishRow';
 
 interface CartItem {
   id: number;
@@ -27,6 +36,8 @@ export default function CartPage() {
   const [coupons, setCoupons] = useState<MyCoupon[]>([]);
   const [selectedCouponId, setSelectedCouponId] = useState<number | ''>('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // 标记当前 items 来自 localStorage(用于调整数量/删除走本地路径,不走后端)
+  const [isLocal, setIsLocal] = useState(false);
 
   const customerHeaders = (): Record<string, string> => ({
     Authorization: `Bearer ${localStorage.getItem('customerToken')}`,
@@ -35,13 +46,27 @@ export default function CartPage() {
   useEffect(() => {
     const token = localStorage.getItem('customerToken');
     if (!token) {
+      // 未登录:从 localStorage 读暂存购物车
       setIsLoggedIn(false);
+      setIsLocal(true);
+      setItems(mapGuestToCartItems(getLocalCart()));
       setLoading(false);
       return;
     }
     setIsLoggedIn(true);
+    setIsLocal(false);
     load();
   }, []);
+
+  function mapGuestToCartItems(guest: GuestCartItem[]): CartItem[] {
+    return guest.map((g) => ({
+      id: g.dishId,
+      dishId: g.dishId,
+      name: g.name,
+      number: g.number,
+      amount: Number(g.price) * g.number,
+    }));
+  }
 
   async function load() {
     try {
@@ -62,6 +87,20 @@ export default function CartPage() {
     }
   }
 
+  // 本地购物车的增删(未登录状态)
+  function changeLocalQty(dishId: number, delta: number) {
+    const cur = items.find((i) => i.dishId === dishId);
+    if (!cur) return;
+    const next = Math.max(0, cur.number + delta);
+    updateLocalCartQty(dishId, next);
+    setItems(mapGuestToCartItems(getLocalCart()));
+  }
+
+  function removeLocalItem(dishId: number) {
+    removeFromLocalCart(dishId);
+    setItems(mapGuestToCartItems(getLocalCart()));
+  }
+
   const total = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
   const selectedCoupon = coupons.find((c) => c.id === selectedCouponId);
   const discount =
@@ -71,6 +110,11 @@ export default function CartPage() {
   const payable = total - discount;
 
   async function checkout() {
+    // 未登录:跳登录页,登录成功后由 login 页把本地购物车合并到服务端
+    if (!isLoggedIn) {
+      router.push('/account/login');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -129,34 +173,50 @@ export default function CartPage() {
       <main className="container mx-auto max-w-3xl px-4 py-6">
         {loading ? (
           <div className="text-center py-16" style={{ color: 'var(--muted)' }}>加载中...</div>
-        ) : !isLoggedIn ? (
-          <div className="text-center py-16 xcard">
-            <div className="text-4xl mb-3">🛒</div>
-            <p className="mb-4" style={{ color: 'var(--muted)' }}>登录后可查看购物车</p>
-            <Link href="/account/login" className="pill pill-accent !h-10 !px-6 inline-block">去登录</Link>
-            <div className="mt-3">
-              <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>暂不登录，继续浏览 →</Link>
-            </div>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-16 xcard">
-            <div className="text-4xl mb-3">🛒</div>
-            <p className="mb-4" style={{ color: 'var(--muted)' }}>购物车空空，去首页看看</p>
-            <Link href="/" className="pill pill-accent !h-10 !px-6 inline-block">去点餐 →</Link>
-          </div>
+        ) : !isLoggedIn && items.length === 0 ? (
+          <EmptyState icon="🛒" text="购物车空空，去首页看看" href="/" ctaLabel="去点餐 →" />
         ) : (
           <>
+            {!isLoggedIn && (
+              <div className="xcard p-3 mb-4 text-sm flex items-center gap-2" style={{ background: 'var(--bg-deep)' }}>
+                <span>🔒</span>
+                <span style={{ color: 'var(--fg-soft)' }}>
+                  以下商品暂存在本机，登录后将自动合并到您的购物车
+                </span>
+              </div>
+            )}
             <div className="xcard divide-y" style={{ borderColor: 'var(--border)' }}>
               {items.map((item) => (
-                <div key={item.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{item.name}</div>
-                  <div className="text-sm" style={{ color: 'var(--muted)' }}>× {item.number}</div>
-                  </div>
-                  <div className="mono font-semibold" style={{ color: 'var(--accent)' }}>
-                    ¥{Number(item.amount).toFixed(2)}
-                  </div>
-                </div>
+                <CompactDishRow
+                  key={item.id}
+                  name={item.name}
+                  number={item.number}
+                  amount={item.amount}
+                  rightSlot={
+                    isLocal && item.dishId ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => changeLocalQty(item.dishId!, -1)}
+                          className="w-7 h-7 rounded-full border text-sm"
+                          style={{ borderColor: 'var(--border)' }}
+                          aria-label="减少"
+                        >−</button>
+                        <button
+                          onClick={() => changeLocalQty(item.dishId!, 1)}
+                          className="w-7 h-7 rounded-full border text-sm"
+                          style={{ borderColor: 'var(--border)' }}
+                          aria-label="增加"
+                        >+</button>
+                        <button
+                          onClick={() => removeLocalItem(item.dishId!)}
+                          className="ml-1 text-xs px-2 py-1 rounded"
+                          style={{ color: 'var(--danger)' }}
+                          aria-label="删除"
+                        >删除</button>
+                      </div>
+                    ) : undefined
+                  }
+                />
               ))}
               <div className="p-4 flex items-center justify-between rounded-b-xl" style={{ background: 'var(--bg-deep)' }}>
                 <span style={{ color: 'var(--muted)' }}>合计</span>
@@ -221,7 +281,7 @@ export default function CartPage() {
               disabled={submitting}
               className="pill pill-accent w-full !h-14 !text-base"
             >
-              {submitting ? '正在下单并支付...' : '去结算'}
+              {submitting ? '正在下单并支付...' : isLoggedIn ? '去结算' : '登录并结算'}
             </button>
           </>
         )}

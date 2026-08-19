@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { EmptyState } from '@/components/EmptyState';
 
 interface Profile {
   id: number;
@@ -194,7 +195,7 @@ export default function AccountPage() {
           <div className="text-center py-10 text-gray-400">加载中...</div>
         ) : tab === 'orders' ? (
           orders.length === 0 ? (
-            <Empty text="还没有订单，去 AI 点餐助手下一单吧" href="/assistant" />
+            <EmptyState icon="🛒" text="还没有订单，去 AI 点餐助手下一单吧" href="/assistant" ctaLabel="去看看 →" />
           ) : (
             <div className="space-y-3">
               {orders.map((o) => (
@@ -232,7 +233,7 @@ export default function AccountPage() {
           )
         ) : tab === 'browse' ? (
           browse.length === 0 ? (
-            <Empty text="还没有浏览记录，去首页看看菜单吧" href="/" />
+            <EmptyState text="还没有浏览记录，去首页看看菜单吧" href="/" ctaLabel="去看看 →" />
           ) : (
             <div className="space-y-3">
               {browse.map((b) => (
@@ -255,7 +256,7 @@ export default function AccountPage() {
           )
         ) : tab === 'coupons' ? (
           coupons.length === 0 ? (
-            <Empty text="还没有领取优惠券，去首页领券中心看看吧" href="/" />
+            <EmptyState icon="🎟️" text="还没有领取优惠券，去首页领券中心看看吧" href="/" ctaLabel="去看看 →" />
           ) : (
             <div className="space-y-3">
               {coupons.map((c) => (
@@ -284,7 +285,7 @@ export default function AccountPage() {
             </div>
           )
         ) : chat.length === 0 ? (
-          <Empty text="还没有聊天记录，去和 AI 点餐助手聊聊吧" href="/assistant" />
+          <EmptyState icon="💬" text="还没有聊天记录，去和 AI 点餐助手聊聊吧" href="/assistant" ctaLabel="去看看 →" />
         ) : (
           <div className="space-y-3">
             {chat.map((m) => (
@@ -307,18 +308,6 @@ export default function AccountPage() {
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function Empty({ text, href }: { text: string; href: string }) {
-  return (
-    <div className="text-center py-12 bg-white rounded-xl shadow-sm">
-      <div className="text-gray-300 text-4xl mb-3">📭</div>
-      <p className="text-gray-400 mb-4">{text}</p>
-      <Link href={href} className="text-orange-500 text-sm font-medium">
-        去看看 →
-      </Link>
     </div>
   );
 }

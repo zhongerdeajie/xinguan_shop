@@ -21,8 +21,7 @@ export default function LoginPage() {
       if (res.token) {
         localStorage.setItem('token', res.token);
         localStorage.setItem('user', JSON.stringify(res.user));
-        // 同步写 cookie，让服务端中间件能拦截未登录访问
-        document.cookie = `auth_token=${res.token}; path=/; max-age=43200; SameSite=Lax`;
+        // 不再写入 cookie,完全靠 Authorization header 鉴权(防 CSRF)
         router.push('/dashboard');
       }
     } catch (err: any) {

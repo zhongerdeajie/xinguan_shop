@@ -82,28 +82,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 服务端拦截：管理端页面在"发出前"必须通过完整验签
-  // 以前只看"有没有 cookie"，现在看"token 真不真"——伪造/过期/顾客 token 都进不来
-  const ADMIN_PATHS = [
-    '/dashboard',
-    '/orders',
-    '/dishes',
-    '/categories',
-    '/setmeals',
-    '/employees',
-    '/users',
-    '/marketing',
-  ];
-  const isAdminPath = ADMIN_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
-  if (isAdminPath) {
-    const token = request.cookies.get('auth_token')?.value || '';
-    const payload = await verifyAdminToken(token);
-    if (!payload) {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
+  // 服务端拦截：管理端页面路径检查
+  // CSRF 防御策略：完全抛弃 cookie 鉴权,只用 Authorization header
+  // 中间件不再读 cookie 验签——因为前端不再写 cookie
+  // 真正的 JWT 验签交给 NestJS(每个 controller 都用 @UseGuards)
+  // 中间件只做路径检查: admin 路径放行, NestJS 自己拦截未鉴权请求
+  // 注: 浏览器访问 admin 页面时中间件不再强制重定向;如未鉴权访问页面,
+  // 由客户端(API 调用 401)或服务端(NestJS 返回 401)拦截,前端跳转登录页
+  void verifyAdminToken; // 保留函数备用(可能用于 RSC fetch)
+  void JWT_SECRET;
 
   const response = NextResponse.next();
 

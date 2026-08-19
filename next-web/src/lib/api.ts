@@ -6,7 +6,9 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true,
+  // CSRF 防御：完全用 Authorization header 鉴权,不发送 cookie
+  // 这样浏览器不会自动带 cookie，跨站请求伪造攻击无法生效
+  withCredentials: false,
 });
 
 // 请求拦截器 — 自动附加 token（兼容管理员 token 和顾客 customerToken）

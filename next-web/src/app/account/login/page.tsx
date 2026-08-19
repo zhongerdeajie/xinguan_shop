@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { mergeLocalCartToServer, getLocalCartCount } from '@/lib/cart-storage';
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -36,6 +37,18 @@ export default function CustomerLoginPage() {
       const data = await res.json();
       localStorage.setItem('customerToken', data.token);
       localStorage.setItem('customerUser', JSON.stringify(data.user));
+
+      // 登录成功:把未登录时的本地暂存购物车合并到服务端
+      // 只在从"未登录"来的会话才需要合并;清 localStorage 后该值为 0
+      const pending = getLocalCartCount();
+      if (pending > 0) {
+        const { merged, failed } = await mergeLocalCartToServer(data.token);
+        if (failed > 0) {
+          // 部分失败时仍跳走,toast 让 /account 或 /cart 页面提示
+          console.warn(`暂存购物车合并:成功 ${merged} / 失败 ${failed}`);
+        }
+      }
+
       router.push('/account');
     } catch (err: any) {
       setError(err.message || '网络错误');

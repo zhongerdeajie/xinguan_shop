@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { CustomerNav, NavBackLink } from '@/components/CustomerNav';
+import { CompactDishRow } from '@/components/CompactDishRow';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -195,21 +197,7 @@ export default function AssistantPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
-      <header className="frosted sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 md:px-8 min-h-16 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🍜</span>
-            <span className="serif text-xl font-semibold" style={{ color: 'var(--accent)' }}>
-              {t.brand}
-            </span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-sm" style={{ color: 'var(--muted)' }}>
-              {t.back}
-            </Link>
-          </div>
-        </div>
-      </header>
+      <CustomerNav rightSlot={<NavBackLink label={t.back} />} />
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 space-y-4">
         {messages.map((m, i) => (
@@ -239,12 +227,12 @@ export default function AssistantPage() {
             <div className="text-sm font-semibold mb-3">🛒 AI 已为你搭配好，确认下单？</div>
             <div className="space-y-1 mb-3">
               {orderSuggestion.items.map((item) => (
-                <div key={item.dishId} className="flex justify-between text-sm">
-                  <span style={{ color: 'var(--fg-soft)' }}>
-                    {item.name} × {item.number}
-                  </span>
-                  <span className="mono">¥{(item.price * item.number).toFixed(2)}</span>
-                </div>
+                <CompactDishRow
+                  key={item.dishId}
+                  name={item.name}
+                  number={item.number}
+                  price={item.price}
+                />
               ))}
             </div>
             <div className="flex items-center justify-between">
