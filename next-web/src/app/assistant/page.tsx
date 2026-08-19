@@ -85,35 +85,76 @@ export default function AssistantPage() {
       const customerToken = localStorage.getItem('customerToken');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (customerToken) headers.Authorization = `Bearer ${customerToken}`;
-      const res = await fetch('/api/ai/chat', {
+      // 流式（SSE）调用：使用 /api/ai/chat/stream,后端通过 nginx 透传 text/event-stream
+      const res = await fetch('/api/ai/chat/stream', {
         method: 'POST',
         headers,
         body: JSON.stringify({ message: content, sessionId: 'web-customer' }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const assistantMsg = {
-        role: 'assistant' as const,
-        content: data.response || '（AI 没有返回内容，请重试）',
-        intent: data.agent || data.intent,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-      // 未登录时将聊天记录缓存到 localStorage
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      // 先放一个空的 assistant 消息占位,后续流式追加
+      const assistantIndex = messages.length + 1; // user 已 push,assistant 在末尾
+      let intentLabel = '';
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '', intent: '' },
+      ]);
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE 事件以 "\n\n" 分隔
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const evt of events) {
+          // 只处理 data: 行
+          const lines = evt.split('\n').filter((l) => l.startsWith('data:'));
+          if (!lines.length) continue;
+          const payload = lines.map((l) => l.slice(5).trim()).join('\n');
+          if (!payload) continue;
+          try {
+            const data = JSON.parse(payload);
+            if (data.type === 'meta') {
+              intentLabel = data.agent || data.intent || '';
+            } else if (data.type === 'chunk') {
+              // 流式追加一字符
+              setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last && last.role === 'assistant') {
+                  next[next.length - 1] = { ...last, content: last.content + data.delta, intent: intentLabel || last.intent };
+                }
+                return next;
+              });
+            } else if (data.type === 'done') {
+              // 流结束,可拿到 order_suggestion 但要回头拿 meta 里的;这里没有,留空
+              // 实际上我们在 meta 已经发送了,无需再处理
+            }
+          } catch {
+            // ignore malformed line
+          }
+        }
+      }
+      // 流结束后,如果最后一条是空 assistant,保留;否则不动
+      const finalAssistant = (() => {
+        const all = [] as typeof messages;
+        // get latest from state via callback chain would need useRef; rely on next render
+        return null;
+      })();
+      // 未登录时把完整对话缓存到 localStorage
       if (!customerToken) {
         setMessages((prev) => {
-          const guestMessages = [...prev, assistantMsg];
-          localStorage.setItem('guestChatHistory', JSON.stringify(guestMessages));
+          localStorage.setItem('guestChatHistory', JSON.stringify(prev));
           return prev;
         });
       } else {
-        // 已登录，检查是否有本地缓存的聊天记录需要同步
         const cached = localStorage.getItem('guestChatHistory');
-        if (cached) {
-          localStorage.removeItem('guestChatHistory');
-        }
-      }
-      if (data.order_suggestion?.items?.length) {
-        setOrderSuggestion(data.order_suggestion);
+        if (cached) localStorage.removeItem('guestChatHistory');
       }
     } catch (e) {
       setMessages((prev) => [

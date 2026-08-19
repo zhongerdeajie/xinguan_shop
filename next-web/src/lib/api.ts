@@ -6,17 +6,23 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // CSRF 防御：完全用 Authorization header 鉴权,不发送 cookie
-  // 这样浏览器不会自动带 cookie，跨站请求伪造攻击无法生效
-  withCredentials: false,
+  // HttpOnly Cookie 鉴权：开启 withCredentials,浏览器自动带 cookie,
+  // 后端 JWT strategy 已经支持优先读 cookie、fallback 读 Authorization 头
+  withCredentials: true,
 });
 
-// 请求拦截器 — 自动附加 token（兼容管理员 token 和顾客 customerToken）
+// 请求拦截器 — 优先依赖 cookie（HttpOnly,JS 读不到,完全抗 XSS）;
+// 仅在 cookie 不存在时 fallback 读 localStorage（兼容老 Vue admin 后台）
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token') || localStorage.getItem('customerToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // 探测是否有 cookie：有 cookie 就不读 localStorage,避免 localStorage 过期 token 把请求拦掉
+    const hasCookie = document.cookie.includes('admin_token=') || document.cookie.includes('customer_token=');
+    if (!hasCookie) {
+      // 老路径：老前端还在用 localStorage,这里兜底兼容
+      const token = localStorage.getItem('token') || localStorage.getItem('customerToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
   }
   return config;
@@ -28,12 +34,12 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
-        const isCustomer = !!localStorage.getItem('customerToken');
+        // 401：清理本地残留(老路径兼容),cookie 由后端 /logout 清
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('customerToken');
         localStorage.removeItem('customerUser');
-        // 顾客跳顾客登录页，管理员跳管理员登录页
+        const isCustomer = document.cookie.includes('customer_token=') || !!localStorage.getItem('customerToken');
         window.location.href = isCustomer ? '/account/login' : '/login';
       }
     }

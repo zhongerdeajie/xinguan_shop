@@ -1,6 +1,8 @@
 """API 路由 - 星选 AI 购物管家"""
+import json
 import re
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -102,33 +104,25 @@ async def health():
     }
 
 
-@router.post("/chat")
-@limiter.limit("10/minute")
-async def chat(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
-    """AI 对话 - 通过 Orchestrator 路由到 6 个专项 Agent
-
-    自动识别用户意图（自然语言下单 / 凑单 / 比价 / 售后 / 营销 / 推荐）
-    """
+async def _process_chat(request: Request, body: ChatRequest, rag: LangChainRAG) -> Dict[str, Any]:
+    """chat 与 chat/stream 共享的内部处理：拿到 orchestrator 完整结果。"""
     auth = request.headers.get("authorization", "")
     customer_token = auth[7:] if auth.startswith("Bearer ") else None
     context_token = set_request_customer_token(customer_token)
 
     # P2-1：语义缓存查询（相似度 > 0.98 直接返回缓存答案）
-    # 包含动作词的消息跳过缓存（退款/取消/下单/确认等需要实时处理）
     from app.core.semantic_cache import semantic_get, semantic_set
     _skip_cache_words = ["退款", "取消", "退货", "投诉", "确认", "下单", "少送", "漏发", "售后"]
     _should_skip_cache = any(w in body.message for w in _skip_cache_words)
     cached_response = await semantic_get(body.message) if not _should_skip_cache else None
     if cached_response is not None:
         reset_request_customer_token(context_token)
-        # P2-1 修复：缓存命中时也保存对话历史，保证多轮记忆不被打断
         try:
             from app.agents.base import get_redis
-            import json as _json
             _key = f"chat:history:{body.session_id}"
             _r = get_redis()
-            _r.lpush(_key, _json.dumps({"role": "assistant", "content": cached_response}, ensure_ascii=False))
-            _r.lpush(_key, _json.dumps({"role": "user", "content": body.message}, ensure_ascii=False))
+            _r.lpush(_key, json.dumps({"role": "assistant", "content": cached_response}, ensure_ascii=False))
+            _r.lpush(_key, json.dumps({"role": "user", "content": body.message}, ensure_ascii=False))
             _r.ltrim(_key, 0, 39)
             _r.expire(_key, 86400)
         except Exception:
@@ -156,24 +150,86 @@ async def chat(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(
     finally:
         reset_request_customer_token(context_token)
 
-    # P2-1：写入语义缓存（仅缓存成功且非售后的回答，避免缓存动态数据）
     if not result.get("error") and result.get("intent") not in ("aftersales", "out_of_scope"):
         await semantic_set(body.message, result.get("response", ""))
-    # 个人隐私脱敏 + 生成可确认的订单建议
     result["response"] = mask_pii(result.get("response", ""))
     result["order_suggestion"] = build_order_suggestion(body.message, result.get("intent"))
     print(f"[chat] intent={result.get('intent')} message_repr={body.message!r} has_dish={'辣椒炒肉' in body.message} suggestion={result.get('order_suggestion')}")
+    return result
+
+
+@router.post("/chat")
+@limiter.limit("10/minute")
+async def chat(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
+    """AI 对话 - 通过 Orchestrator 路由到 6 个专项 Agent（一次性返回）"""
+    result = await _process_chat(request, body, rag)
     return {
         "response": result["response"],
         "intent": result["intent"],
         "agent": result["agent"],
         "entities": result["entities"],
         "tools_used": result["tools_used"],
-        "order_suggestion": result["order_suggestion"],
+        "order_suggestion": result.get("order_suggestion"),
         "error": result["error"],
         "intent_confidence": result.get("intent_confidence", 0.0),
         "intent_method": result.get("intent_method", "keyword"),
     }
+
+
+@router.post("/chat/stream")
+@limiter.limit("10/minute")
+async def chat_stream(request: Request, body: ChatRequest, rag: LangChainRAG = Depends(get_rag)):
+    """AI 对话 - Server-Sent Events 流式响应
+
+    事件格式（每行一条 data: {...}）：
+      1) data: {"type":"meta","intent":"...","agent":"...","entities":{...},"tools_used":[...],"order_suggestion":{...}}
+      2) data: {"type":"chunk","delta":"你"}
+      3) data: {"type":"chunk","delta":"好"}
+      ...（逐字推送,前端可实现打字机效果）
+      4) data: {"type":"done","full":"完整文本","intent_confidence":...}
+    """
+    result = await _process_chat(request, body, rag)
+
+    full_text = result.get("response", "")
+    # 兼容 cached / orchestrator 两条路径
+    meta_payload = {
+        "type": "meta",
+        "intent": result.get("intent"),
+        "agent": result.get("agent"),
+        "entities": result.get("entities", {}),
+        "tools_used": result.get("tools_used", []),
+        "order_suggestion": result.get("order_suggestion"),
+        "error": result.get("error", False),
+    }
+    done_payload = {
+        "type": "done",
+        "full": full_text,
+        "intent_confidence": result.get("intent_confidence", 0.0),
+        "intent_method": result.get("intent_method", "keyword"),
+    }
+
+    async def event_stream():
+        # 先发 meta,前端拿到 intent/agent 后可立即展示标签
+        yield f"data: {json.dumps(meta_payload, ensure_ascii=False)}\n\n"
+        # 逐字推送(每字一个 SSE chunk,每字之间 sleep 模拟"打字机")
+        # 30 字/秒 ~ 打字机效果,首字立即可见
+        import asyncio as _asyncio
+        for ch in full_text:
+            chunk_payload = {"type": "chunk", "delta": ch}
+            yield f"data: {json.dumps(chunk_payload, ensure_ascii=False)}\n\n"
+            await _asyncio.sleep(0.033)  # 30 字/秒
+        # 最后发 done
+        yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # nginx 不要 buffer
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.post("/chat/legacy")

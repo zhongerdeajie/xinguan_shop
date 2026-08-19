@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -27,6 +28,9 @@ async function bootstrap() {
 
   // 全局校验
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  // 解析 Cookie（HttpOnly cookie 鉴权需要）
+  app.use(cookieParser());
 
   // CORS：白名单 origin，允许带凭证（cookie）
   // 注意：origin: '*' 和 credentials: true 不能同时使用（浏览器规范禁止）
