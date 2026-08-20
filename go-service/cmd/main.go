@@ -37,14 +37,9 @@ func main() {
 	defer rdb.Close()
 
 	// 初始化 MySQL（带重试）
-	db, err := mysql.NewDB(cfg.MySQL)
-	for i := 1; err != nil && i <= 30; i++ {
-		log.Printf("MySQL connection attempt %d/30 failed: %v", i, err)
-		time.Sleep(2 * time.Second)
-		db, err = mysql.NewDB(cfg.MySQL)
-	}
+	db, err := mysql.InitWithRetry(cfg.MySQL, 30)
 	if err != nil {
-		log.Fatalf("MySQL init failed after 30 attempts: %v", err)
+		log.Fatalf("MySQL init failed: %v", err)
 	}
 	defer db.Close()
 

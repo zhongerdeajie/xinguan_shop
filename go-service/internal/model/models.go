@@ -39,6 +39,9 @@ type Dish struct {
 	Image       string    `json:"image" gorm:"column:image"`
 	Description string    `json:"description" gorm:"column:description"`
 	Status      int       `json:"status" gorm:"column:status;default:1"`
+	Stock       int       `json:"stock" gorm:"column:stock;default:0"`
+	Version     int       `json:"version" gorm:"column:version;default:0"`
+	StockAlert  int       `json:"stockAlert" gorm:"column:stock_alert;default:10"`
 	Rating      float64   `json:"rating" gorm:"column:rating;default:4.5"`
 	Sales       int       `json:"sales" gorm:"column:sales;default:0"`
 	IsSponsored bool      `json:"isSponsored" gorm:"column:is_sponsored;default:false"`
