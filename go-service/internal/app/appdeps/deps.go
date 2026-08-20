@@ -23,8 +23,9 @@ type Deps struct {
 // build it once so subpackages can borrow individual services without each
 // constructing their own repository.
 type Services struct {
-	Write *service.WriteService
-	Order *service.OrderService
+	Write   *service.WriteService
+	Order   *service.OrderService
+	OrderV2 *service.OrderServiceV2 // 新一代: 跨存储最终一致 + Outbox, 灰度切换
 }
 
 // NewServices is the single place where the repository and services are
@@ -33,7 +34,8 @@ type Services struct {
 func NewServices(d Deps) Services {
 	repo := repository.NewWriteRepository(d.DB, d.Redis)
 	return Services{
-		Write: service.NewWriteService(repo, d.Redis),
-		Order: service.NewOrderService(repo, d.Redis),
+		Write:   service.NewWriteService(repo, d.Redis),
+		Order:   service.NewOrderService(repo, d.Redis),
+		OrderV2: service.NewOrderServiceV2(repo, d.Redis),
 	}
 }

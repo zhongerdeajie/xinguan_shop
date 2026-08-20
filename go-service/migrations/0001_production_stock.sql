@@ -12,22 +12,57 @@
 -- 3. 新增 stock_audit_log 表（库存漂移审计，运维追溯）
 -- ============================================================
 
-USE sky_take_out;
+USE starselect;
 
 -- ------------------------------------------------------------
 -- 1. dish 表：库存真值 + 乐观锁
+-- 防御:MySQL 没有 ADD COLUMN IF NOT EXISTS, 用 information_schema 提前检查
 -- ------------------------------------------------------------
-ALTER TABLE dish
-    ADD COLUMN stock       INT NOT NULL DEFAULT 0
-        COMMENT '真实库存(数字, 0=售罄)' AFTER description,
-    ADD COLUMN version     INT NOT NULL DEFAULT 0
-        COMMENT '乐观锁版本号, 每次 UpdateDish 自增' AFTER stock,
-    ADD COLUMN stock_alert INT NOT NULL DEFAULT 10
-        COMMENT '低库存阈值, < 该值触发告警' AFTER version;
 
--- 初始库存:全 0(售罄), 等管理员通过菜品管理页面初始化
--- 之前 redis SetNX 默认 100 是 P1 bug, 永远卖得出去; 这里强制走菜品编辑 API
-UPDATE dish SET stock = 0 WHERE stock IS NULL;
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'starselect'
+       AND TABLE_NAME   = 'dish'
+       AND COLUMN_NAME  = 'stock'
+);
+
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE dish ADD COLUMN stock INT NOT NULL DEFAULT 0 COMMENT ''真实库存(数字, 0=售罄)'' AFTER description',
+    'SELECT 1');
+
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'starselect'
+       AND TABLE_NAME   = 'dish'
+       AND COLUMN_NAME  = 'version'
+);
+
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE dish ADD COLUMN version INT NOT NULL DEFAULT 0 COMMENT ''乐观锁版本号, 每次 UpdateDish 自增'' AFTER stock',
+    'SELECT 1');
+
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'starselect'
+       AND TABLE_NAME   = 'dish'
+       AND COLUMN_NAME  = 'stock_alert'
+);
+
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE dish ADD COLUMN stock_alert INT NOT NULL DEFAULT 10 COMMENT ''低库存阈值, < 该值触发告警'' AFTER version',
+    'SELECT 1');
+
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ------------------------------------------------------------
 -- 2. outbox_events: 事件表, 与 orders 同事务写入
@@ -79,10 +114,8 @@ CREATE TABLE IF NOT EXISTS stock_audit_log (
   COMMENT='库存漂移审计, 由校准 worker 写入';
 
 -- ------------------------------------------------------------
--- 4. 索引补强:order_detail 加 dish_id 索引加速库存校准
+-- 4. 索引补强:order_detail.dish_id 索引已存在(order_detail_dish_id_fkey), 跳过
 -- ------------------------------------------------------------
-ALTER TABLE order_detail
-    ADD INDEX idx_dish (dish_id);
 
 -- ------------------------------------------------------------
 -- 5. 收尾验证

@@ -15,7 +15,10 @@ services:
 
   # Go 高并发服务
   go-service:
-    build: ./go-service
+    build:
+      context: ./go-service
+      dockerfile: Dockerfile
+      # 同时编译 main + outbox-worker + stock-sync, 镜像里就有三个 binary
     ports:
       - "8081:8081"
     environment:
@@ -27,9 +30,53 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MYSQL_DATABASE=starselect
       - JWT_SECRET=${JWT_SECRET}
+      # 灰度开关: 设为 1 切换到 OrderServiceV2(Outbox + Lua 预扣)
+      - USE_ORDER_V2=${USE_ORDER_V2:-0}
     depends_on:
       - redis
       - mysql
+    restart: unless-stopped
+
+  # Outbox 事件消费 worker: 把 outbox_events 投递到 Redis Stream order:events
+  # 不对外暴露端口
+  go-outbox-worker:
+    build:
+      context: ./go-service
+      dockerfile: Dockerfile
+    command: ["/app/outbox-worker"]
+    environment:
+      - REDIS_ADDR=redis:6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=starselect
+    depends_on:
+      - redis
+      - mysql
+      - go-service
+    restart: unless-stopped
+
+  # 库存校准 worker: 每 5 分钟扫菜品漂移
+  # 暴露 :8082 提供 Prometheus 文本 /metrics
+  go-stock-sync:
+    build:
+      context: ./go-service
+      dockerfile: Dockerfile
+    command: ["/app/stock-sync"]
+    ports:
+      - "8082:8082"
+    environment:
+      - REDIS_ADDR=redis:6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=starselect
+    depends_on:
+      - redis
+      - mysql
+      - go-service
     restart: unless-stopped
 
   # Python AI + LangChain RAG

@@ -64,10 +64,8 @@ func (h *Handler) List(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	for i := range dishes {
-		stockKey := fmt.Sprintf("dish:%d:stock", dishes[i].ID)
-		h.rdb.SetNX(c.Request.Context(), stockKey, 100, 0)
-	}
+	// 注意: 不再 SetNX 默认 100(那是 P1 bug, 永远卖得出去)
+	// Redis 库存由 stock-sync worker 首次拉取时初始化(24h TTL, 失败靠 worker 重建)
 	c.JSON(200, gin.H{"data": dishes})
 }
 
@@ -160,6 +158,14 @@ func (h *Handler) Update(c *gin.Context) {
 		key := fmt.Sprintf("price:history:%d", id)
 		now := time.Now().Unix()
 		h.rdb.ZAdd(c.Request.Context(), key, redis9.Z{Score: float64(now), Member: fmt.Sprintf("%.2f@%d", price, now)})
+	}
+	// 同步 stock 到 Redis: 如果管理员修改了库存, 这里立刻同步
+	// 否则 stock-sync worker 会 5 分钟后校准(漂移期内可能超卖)
+	if stock, ok := updates["stock"].(float64); ok {
+		if err := h.svcs.Write.SyncDishStock(c.Request.Context(), id, int(stock)); err != nil {
+			// 同步失败不阻塞返回, worker 会兜底
+			fmt.Printf("[WARN] SyncDishStock failed for dish %d: %v\n", id, err)
+		}
 	}
 	c.JSON(200, gin.H{"message": "更新成功"})
 }
