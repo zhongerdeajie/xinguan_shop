@@ -139,3 +139,9 @@ return 1
 func (c *Client) DistributedLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	return c.AcquireLock(ctx, key, ttl)
 }
+
+// Publish 发布 Pub/Sub 消息(2026-08-20 新增)
+// 用于跨服务通知:NestJS OrdersGateway 订阅同 channel, 收到即 broadcastNewOrder
+func (c *Client) Publish(ctx context.Context, channel string, payload interface{}) (int64, error) {
+	return c.Client.Publish(ctx, channel, payload).Result()
+}

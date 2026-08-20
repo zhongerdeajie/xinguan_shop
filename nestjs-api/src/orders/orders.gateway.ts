@@ -4,6 +4,11 @@
 //   客户端连 ws://host/ws/admin-orders   (带 cookie admin_token 或 Authorization Bearer)
 //   服务器校验 JWT 通过后,把 socket 加入 "admin:orders" room
 //   新订单创建后,广播 "order:new" 事件,带订单摘要
+//
+// Pub/Sub 通道 (2026-08-20 新增):
+//   - Go service SubmitOrder 成功后 rdb.Publish("order:new", payloadJSON)
+//   - 本 Gateway 启动时订阅 "order:new" 频道,收到即广播给 admin:orders room
+//   - 这样 Go service 与 NestJS 不需要直连, 跨服务"新订单通知"由 Redis 通道解耦
 
 import {
   WebSocketGateway,
@@ -15,8 +20,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import Redis from 'ioredis';
 
 // 路径前缀 /ws,对应 nginx /ws/ location
 @WebSocketGateway({
@@ -26,11 +32,18 @@ import { JwtService } from '@nestjs/jwt';
     credentials: true,
   },
 })
-export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class OrdersGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(OrdersGateway.name);
 
   @WebSocketServer()
   server!: Server;
+
+  // Redis 订阅客户端(独立连接, 不能复用 dishes 的写入客户端)
+  private sub!: Redis;
+  // 监听哪个 channel(Go service Publish 一致即可)
+  private readonly channel = 'order:new';
 
   constructor(
     private readonly jwtService: JwtService,
@@ -53,7 +66,6 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
       const payload = await this.jwtService.verifyAsync(token);
-      // 只有管理员 type=admin 能订阅
       if (payload.type !== 'admin') {
         client.disconnect(true);
         return;
@@ -72,6 +84,53 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: Socket) {
     if (client.data?.username) {
       this.logger.log(`管理员 ${client.data.username} 断开 /ws/admin-orders`);
+    }
+  }
+
+  /**
+   * 模块启动时建立 Redis 订阅客户端, 监听 "order:new" 频道
+   *
+   * 失败处理:
+   *   - 订阅失败 / 连接断开: ioredis 会自动重连, 这里只记日志
+   *   - 解码失败: 记 warn 跳过, 不影响其它事件
+   */
+  async onModuleInit() {
+    this.sub = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+      // 订阅客户端不要执行 lazyConnect, 启动后立即订阅
+      lazyConnect: false,
+      maxRetriesPerRequest: 3,
+    });
+
+    this.sub.on('error', (err) => {
+      this.logger.warn(`Redis 订阅客户端错误: ${err.message}`);
+    });
+    this.sub.on('reconnecting', (ms) => {
+      this.logger.warn(`Redis 订阅客户端重连中 (${ms}ms)`);
+    });
+    this.sub.on('ready', () => {
+      this.logger.log('✅ Redis 订阅客户端就绪, channel=order:new');
+    });
+
+    await this.sub.subscribe(this.channel);
+    this.sub.on('message', (channel, message) => {
+      if (channel !== this.channel) return;
+      try {
+        const order = JSON.parse(message);
+        this.broadcastNewOrder(order);
+      } catch (err) {
+        this.logger.warn(`order:new 消息解析失败: ${(err as Error).message}`);
+      }
+    });
+  }
+
+  async onModuleDestroy() {
+    if (this.sub) {
+      try {
+        await this.sub.unsubscribe(this.channel);
+      } catch {
+        /* ignore */
+      }
+      this.sub.disconnect();
     }
   }
 

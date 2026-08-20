@@ -309,3 +309,40 @@ model OrderDetail {
   @@index([orderId])
   @@map("order_detail")
 }
+
+// ============================================================
+// 跨服务事件 / 库存审计 (2026-08-20 新增, 由 Go service 维护)
+// Prisma db push 默认会 drop 不在 schema 的表, 必须显式声明
+// ============================================================
+
+model OutboxEvent {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  aggregate    String   @db.VarChar(64)
+  aggregateId  BigInt   @map("aggregate_id") @db.UnsignedBigInt
+  eventType    String   @map("event_type") @db.VarChar(64)
+  payload      Json
+  status       Int      @default(0)
+  retryCount   Int      @default(0) @map("retry_count")
+  lastError    String?  @map("last_error") @db.VarChar(512)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  processedAt  DateTime? @map("processed_at") @db.DateTime(3)
+
+  @@index([status, createdAt], name: "idx_status_created")
+  @@index([aggregate, aggregateId], name: "idx_aggregate")
+  @@map("outbox_events")
+}
+
+model StockAuditLog {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  dishId      Int      @map("dish_id")
+  mysqlStock  Int      @map("mysql_stock")
+  redisStock  Int      @map("redis_stock")
+  drift       Int
+  action      String   @db.VarChar(32)
+  note        String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([dishId, createdAt], name: "idx_dish_created")
+  @@index([drift, createdAt], name: "idx_drift_created")
+  @@map("stock_audit_log")
+}

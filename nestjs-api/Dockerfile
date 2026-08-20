@@ -14,7 +14,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
-RUN npx prisma db push --skip-generate 2>/dev/null || true
+# 构建期执行 schema 同步 (这是唯一一次 db push, 不在启动时再跑)
+RUN npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true
 EXPOSE 3000
-# 启动时自动建表 + 灌入种子数据 + 启动服务
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node prisma/seed.js && node dist/main.js"]
+# 启动时只跑 seed + main, 不再 db push (防止 Prisma drop 掉 outbox_events 等不在 schema 的表)
+CMD ["sh", "-c", "node prisma/seed.js && node dist/main.js"]

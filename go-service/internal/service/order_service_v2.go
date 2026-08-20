@@ -136,12 +136,30 @@ func (s *OrderServiceV2) SubmitOrder(ctx context.Context, userID int, dto model.
 	// 7. 成功!
 	success = true
 
-	// 8. 异步清理 pending(失败不影响订单, worker 会兜底)
+	// 8. 异步清理 pending + 跨服务通知 NestJS WS Gateway
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+		// (a) ConfirmStock: 清 Redis pending 标记
 		if err := s.rdb.ConfirmStock(bgCtx, orderNumber); err != nil {
 			fmt.Printf("[WARN] ConfirmStock 失败 orderNo=%s err=%v\n", orderNumber, err)
+		}
+		// (b) 跨服务推送: 发布到 Redis Pub/Sub "order:new" 频道
+		//     NestJS OrdersGateway 订阅同频道, 收到后 socket.io 广播给 admin:orders room
+		//     失败不影响下单主流程, WS 是优化项不是核心
+		notice := map[string]interface{}{
+			"id":        order.ID,
+			"number":    order.OrderNumber,
+			"userId":    userID,
+			"amount":    order.Amount,
+			"status":    order.Status,
+			"createdAt": order.OrderTime,
+		}
+		payload, _ := json.Marshal(notice)
+		if n, err := s.rdb.Publish(bgCtx, "order:new", string(payload)); err != nil {
+			fmt.Printf("[WARN] Publish order:new 失败 orderNo=%s err=%v\n", orderNumber, err)
+		} else if n > 0 {
+			fmt.Printf("[INFO] order:new 推送给 %d 个订阅者 orderNo=%s\n", n, orderNumber)
 		}
 	}()
 
