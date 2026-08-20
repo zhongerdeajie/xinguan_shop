@@ -346,3 +346,99 @@ model StockAuditLog {
   @@index([drift, createdAt], name: "idx_drift_created")
   @@map("stock_audit_log")
 }
+
+// ============================================================
+// 2026-08-20 从 0002_production_grade.sql 同步新增 5 张表
+// ============================================================
+
+model PaymentLog {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId         BigInt   @map("order_id") @db.UnsignedBigInt
+  userId          Int      @map("user_id")
+  paymentMethod   Int      @map("payment_method")
+  amount          Decimal  @db.Decimal(10, 2)
+  transactionId   String?  @map("transaction_id") @db.VarChar(64)
+  status          Int      @default(0)
+  requestPayload  String?  @db.Text @map("request_payload")
+  responsePayload String?  @db.Text @map("response_payload")
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  isDeleted       Int      @default(0) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.DateTime(3)
+
+  @@index([orderId], name: "idx_paylog_order")
+  @@index([userId, createdAt], name: "idx_paylog_user_created")
+  @@index([status], name: "idx_paylog_status")
+  @@index([isDeleted], name: "idx_paylog_is_deleted")
+  @@map("payment_log")
+}
+
+model RefundLog {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  paymentLogId    BigInt   @map("payment_log_id") @db.UnsignedBigInt
+  orderId         BigInt   @map("order_id") @db.UnsignedBigInt
+  userId          Int      @map("user_id")
+  refundAmount    Decimal  @db.Decimal(10, 2) @map("refund_amount")
+  refundReason    String?  @map("refund_reason") @db.VarChar(255)
+  transactionId   String?  @map("transaction_id") @db.VarChar(64)
+  status          Int      @default(0)
+  requestPayload  String?  @db.Text @map("request_payload")
+  responsePayload String?  @db.Text @map("response_payload")
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  isDeleted       Int      @default(0) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.DateTime(3)
+
+  @@index([orderId], name: "idx_refund_order")
+  @@index([paymentLogId], name: "idx_refund_payment_log")
+  @@index([userId, createdAt], name: "idx_refund_user_created")
+  @@index([isDeleted], name: "idx_refund_is_deleted")
+  @@map("refund_log")
+}
+
+model DishReview {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId     BigInt   @map("order_id") @db.UnsignedBigInt
+  userId      Int      @map("user_id")
+  dishId      Int      @map("dish_id")
+  rating      Int
+  content     String?  @db.VarChar(500)
+  images      Json?
+  isAnonymous Int      @default(0) @map("is_anonymous")
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  isDeleted   Int      @default(0) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at") @db.DateTime(3)
+
+  @@index([dishId, createdAt], name: "idx_review_dish_created")
+  @@index([userId], name: "idx_review_user")
+  @@index([orderId], name: "idx_review_order")
+  @@index([isDeleted], name: "idx_review_is_deleted")
+  @@map("dish_review")
+}
+
+model UserCouponLog {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId        Int      @map("user_id")
+  couponId      Int      @map("coupon_id")
+  userCouponId  Int      @map("user_coupon_id")
+  action        String   @db.VarChar(16)
+  orderId       BigInt?  @map("order_id") @db.UnsignedBigInt
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([userCouponId], name: "idx_couponlog_user_coupon")
+  @@index([userId, createdAt], name: "idx_couponlog_user_created")
+  @@map("user_coupon_log")
+}
+
+model AddressLog {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  addressId Int      @map("address_id")
+  userId    Int      @map("user_id")
+  snapshot  Json
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([addressId], name: "idx_addrlog_address")
+  @@index([userId, createdAt], name: "idx_addrlog_user_created")
+  @@map("address_log")
+}

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -94,23 +97,10 @@ func main() {
 
 	for _, f := range pending {
 		fmt.Printf("▶  执行 %s ...\n", f)
-		sqlText, err := os.ReadFile(filepath.Join(*dir, f))
-		if err != nil {
-			log.Fatalf("读取 %s 失败: %v", f, err)
-		}
-
-		// 用 GORM 的 Exec 跑整段 SQL
-		// 多语句 SQL 用 ; 分隔, GORM.Exec 一次跑多语句会被 MySQL 拒绝
-		// 所以拆成单条, 每条独立 Exec
-		stmts := splitSQL(string(sqlText))
-		for i, stmt := range stmts {
-			if strings.TrimSpace(stmt) == "" {
-				continue
-			}
-			// 用独立的 Exec 跑每条,失败立刻终止
-			if err := db.WithContext(ctx).Exec(stmt).Error; err != nil {
-				log.Fatalf("  ❌ %s 第 %d 条失败: %v\n语句: %s", f, i+1, err, truncate(stmt, 200))
-			}
+		// 用 mysql CLI 执行整个 SQL 文件
+		// 原因: 0002 用了 PREPARE/EXECUTE/DEALLOCATE, 需要同一连接多次执行, GORM Exec 拆分会失败
+		if err := runMysqlScript(ctx, cfg.MySQL, filepath.Join(*dir, f)); err != nil {
+			log.Fatalf("  ❌ %s 执行失败: %v", f, err)
 		}
 
 		// 记录已执行
@@ -172,29 +162,11 @@ func loadApplied(db *mysql.DB) (map[string]bool, error) {
 	return out, nil
 }
 
-// splitSQL 按 ; 拆 SQL
-// 简单实现:不处理 BEGIN/END/字符串里的 ;
-// 对于当前 0001_production_stock.sql 里的 SELECT 验证语句足够
-func splitSQL(text string) []string {
-	lines := strings.Split(text, "\n")
-	var out []string
-	var sb strings.Builder
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			continue // 注释行跳过
-		}
-		sb.WriteString(line)
-		sb.WriteString("\n")
-		if strings.HasSuffix(trimmed, ";") {
-			out = append(out, sb.String())
-			sb.Reset()
-		}
-	}
-	if strings.TrimSpace(sb.String()) != "" {
-		out = append(out, sb.String())
-	}
-	return out
+// splitSQL 旧版占位(已废弃)。
+// 0002 用了 PREPARE/EXECUTE/DEALLOCATE, 跨连接会丢失 session 变量。
+// 改为 runMysqlScript 用 mysql CLI 一次性执行整个文件。
+func splitSQL(_ string) []string {
+	return nil
 }
 
 func truncate(s string, n int) string {
@@ -202,4 +174,40 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// runMysqlScript 用 mysql CLI 执行 SQL 文件
+// 优势: 支持多语句、PREPARE/EXECUTE/DEALLOCATE、复合语句
+// 跨平台: Windows 用 mysql.exe, Linux/Mac 用 mysql
+// 密码用 MYSQL_PWD 环境变量(避免命令行泄露)
+func runMysqlScript(ctx context.Context, cfg config.MySQLConfig, filePath string) error {
+	mysqlBin := "mysql"
+	if runtime.GOOS == "windows" {
+		if _, err := exec.LookPath(mysqlBin); err != nil {
+			return fmt.Errorf("Windows 上未找到 mysql CLI, 请安装 MySQL 客户端: %w", err)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, mysqlBin,
+		"-h", cfg.Host,
+		"-P", cfg.Port,
+		"-u", cfg.User,
+		"-D", cfg.Database,
+		"--default-character-set=utf8mb4",
+		"--show-warnings",
+	)
+	cmd.Env = append(os.Environ(), "MYSQL_PWD="+cfg.Password)
+	sqlBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+	cmd.Stdin = bytes.NewReader(sqlBytes)
+	output, err := cmd.CombinedOutput()
+	if len(output) > 0 {
+		fmt.Printf("%s\n", string(output))
+	}
+	if err != nil {
+		return fmt.Errorf("mysql CLI 执行失败: %w", err)
+	}
+	return nil
 }
