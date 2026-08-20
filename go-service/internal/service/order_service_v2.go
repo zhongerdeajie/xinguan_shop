@@ -271,11 +271,13 @@ func (s *OrderServiceV2) createOrderInTx(
 			Dishes:      toOrderItems(cartItems),
 		}
 		payload, _ := json.Marshal(evt)
+		// MySQL JSON 列不接受 binary 类型参数, 把 []byte 转成 string
+		// 这是 MySQL 8 + GORM 的兼容性坑(详见 commit message)
 		if err := tx.Exec(`
             INSERT INTO outbox_events
                 (aggregate, aggregate_id, event_type, payload, status, created_at)
-            VALUES (?, ?, ?, ?, 0, NOW(3))
-        `, "order", order.ID, EventOrderCreated, payload).Error; err != nil {
+            VALUES (?, ?, ?, CAST(? AS JSON), 0, NOW(3))
+        `, "order", order.ID, EventOrderCreated, string(payload)).Error; err != nil {
 			return fmt.Errorf("写 outbox 事件失败: %w", err)
 		}
 
@@ -409,7 +411,7 @@ func (s *OrderServiceV2) afterRefund(order model.Orders, details []model.OrderDe
 	if err := s.repo.GetDB().WithContext(bgCtx).Exec(`
         INSERT INTO outbox_events
             (aggregate, aggregate_id, event_type, payload, status, created_at)
-        VALUES (?, ?, ?, ?, 0, NOW(3))
+        VALUES (?, ?, ?, CAST(? AS JSON), 0, NOW(3))
     `, "order", order.ID, EventOrderRefunded, payload).Error; err != nil {
 		fmt.Printf("[CRITICAL] 写退款 outbox 事件失败 order=%d err=%v\n", order.ID, err)
 	}
@@ -481,8 +483,8 @@ func (s *OrderServiceV2) CancelOrder(ctx context.Context, userID int, dto model.
 		_ = s.repo.GetDB().WithContext(bgCtx).Exec(`
             INSERT INTO outbox_events
                 (aggregate, aggregate_id, event_type, payload, status, created_at)
-            VALUES (?, ?, ?, ?, 0, NOW(3))
-        `, "order", order.ID, EventOrderCancelled, payload).Error
+            VALUES (?, ?, ?, CAST(? AS JSON), 0, NOW(3))
+        `, "order", order.ID, EventOrderCancelled, string(payload)).Error
 	}()
 
 	return nil
