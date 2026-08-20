@@ -256,7 +256,8 @@ func (s *OrderServiceV2) createOrderInTx(
 			return fmt.Errorf("写订单明细失败: %w", err)
 		}
 
-		// 2. 扣 MySQL 库存(乐观锁: RowsAffected 必须 == 1)
+		// 2. 扣 MySQL 库存(乐观锁: RowsAffected 必须 == 1) + 写库存预留记录
+		//    inventory_reservation 表记录本次下单的库存预留, 供对账/防超卖审计
 		for _, item := range cartItems {
 			if item.DishID == nil {
 				continue
@@ -274,6 +275,18 @@ func (s *OrderServiceV2) createOrderInTx(
 			}
 			if res.RowsAffected == 0 {
 				return fmt.Errorf("菜品 [%s] MySQL 库存不足", item.Name)
+			}
+			// 同事务写库存预留记录(只追加, 行业惯例)
+			if err := tx.Create(&model.InventoryReservation{
+				OrderID:   order.ID,
+				DishID:    *item.DishID,
+				Quantity:  item.Number,
+				Status:    1, // 已占用(下单即扣库存)
+				ExpiresAt: now.Add(30 * time.Minute),
+				CreatedAt: now,
+				UpdatedAt: now,
+			}).Error; err != nil {
+				return fmt.Errorf("写库存预留记录失败: %w", err)
 			}
 		}
 
@@ -424,6 +437,31 @@ func (s *OrderServiceV2) afterRefund(order model.Orders, details []model.OrderDe
         VALUES (?, ?, ?, CAST(? AS JSON), 0, NOW(3))
     `, "order", order.ID, EventOrderRefunded, string(payload)).Error; err != nil {
 		fmt.Printf("[CRITICAL] 写退款 outbox 事件失败 order=%d err=%v\n", order.ID, err)
+	}
+
+	// 4) 退款流水(只追加, 行业惯例)
+	//    失败不影响退款主流程, 流水只做审计/对账用途
+	//    用 Find 避免 First 的 record not found 警告(该订单可能没有支付流水)
+	var paymentLogs []model.PaymentLog
+	_ = s.repo.GetDB().WithContext(bgCtx).
+		Where("order_id = ? AND status = 1", order.ID).
+		Order("id DESC").Limit(1).Find(&paymentLogs).Error
+	var paymentLogID int64
+	if len(paymentLogs) > 0 {
+		paymentLogID = paymentLogs[0].ID
+	}
+	if err := s.repo.CreateRefundLog(bgCtx, &model.RefundLog{
+		PaymentLogID:  paymentLogID,
+		OrderID:       order.ID,
+		UserID:        order.UserID,
+		RefundAmount:  order.Amount,
+		RefundReason:  "用户申请退款",
+		TransactionID: generateTransactionID(),
+		Status:        1, // 成功
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}); err != nil {
+		fmt.Printf("[WARN] 写退款流水失败 order=%d err=%v\n", order.ID, err)
 	}
 }
 

@@ -7,7 +7,8 @@ export class EmployeesService {
 
   async findAll(page: number, limit: number, name?: string) {
     const skip = (page - 1) * limit;
-    const where = name ? { name: { contains: name } } : {};
+    const where: any = { deletedAt: null }; // 软删过滤
+    if (name) where.name = { contains: name };
     const [data, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
@@ -30,8 +31,8 @@ export class EmployeesService {
   }
 
   async findOne(id: number) {
-    const employee = await this.prisma.employee.findUnique({
-      where: { id },
+    const employee = await this.prisma.employee.findFirst({
+      where: { id, deletedAt: null }, // 软删过滤
       select: { id: true, name: true, username: true, phone: true, sex: true, idNumber: true, status: true, createTime: true, updateTime: true },
     });
     if (!employee) {
@@ -101,8 +102,10 @@ export class EmployeesService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.employee.delete({
+    // 软删
+    return this.prisma.employee.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 }

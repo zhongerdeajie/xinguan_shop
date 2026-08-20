@@ -36,6 +36,10 @@ export class CouponService {
   }
 
   remove(id: number) {
-    return this.prisma.coupon.delete({ where: { id } });
+    // 软删
+    return this.prisma.coupon.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }

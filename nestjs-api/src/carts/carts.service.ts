@@ -100,14 +100,18 @@ export class CartsService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.shoppingCart.delete({
+    // 软删
+    return this.prisma.shoppingCart.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 
   async clearByUserId(userId: number) {
-    return this.prisma.shoppingCart.deleteMany({
+    // 软删(清空)
+    return this.prisma.shoppingCart.updateMany({
       where: { userId },
+      data: { deletedAt: new Date() },
     });
   }
 }

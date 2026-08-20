@@ -1,8 +1,21 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// softDelete 是所有主表的软删字段, 用 GORM gorm.DeletedAt 自动实现:
+//   - 删除自动变成 UPDATE SET deleted_at = NOW()
+//   - 所有查询自动追加 AND deleted_at IS NULL
+//   - 只有含 deleted_at 列的表用(子表 setmeal_dish/dish_flavor 不用)
+type softDelete struct {
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"column:deleted_at"`
+}
 
 type Employee struct {
+	softDelete
 	ID        int       `json:"id" gorm:"primaryKey;column:id"`
 	Name      string    `json:"name" gorm:"column:name"`
 	Username  string    `json:"username" gorm:"column:username"`
@@ -20,6 +33,7 @@ type Employee struct {
 func (Employee) TableName() string { return "employee" }
 
 type Category struct {
+	softDelete
 	ID         int       `json:"id" gorm:"primaryKey;column:id"`
 	Name       string    `json:"name" gorm:"column:name"`
 	Type       int       `json:"type" gorm:"column:type"`
@@ -32,6 +46,7 @@ type Category struct {
 func (Category) TableName() string { return "category" }
 
 type Dish struct {
+	softDelete
 	ID          int       `json:"id" gorm:"primaryKey;column:id"`
 	Name        string    `json:"name" gorm:"column:name"`
 	CategoryID  int       `json:"categoryId" gorm:"column:category_id"`
@@ -54,6 +69,7 @@ type Dish struct {
 func (Dish) TableName() string { return "dish" }
 
 type Setmeal struct {
+	softDelete
 	ID          int       `json:"id" gorm:"primaryKey;column:id"`
 	Name        string    `json:"name" gorm:"column:name"`
 	CategoryID  int       `json:"categoryId" gorm:"column:category_id"`
@@ -83,6 +99,7 @@ type SetmealDish struct {
 func (SetmealDish) TableName() string { return "setmeal_dish" }
 
 type User struct {
+	softDelete
 	ID        int       `json:"id" gorm:"primaryKey;column:id"`
 	Openid    string    `json:"openid" gorm:"column:openid"`
 	Name      string    `json:"name" gorm:"column:name"`
@@ -96,6 +113,7 @@ type User struct {
 func (User) TableName() string { return "user" }
 
 type AddressBook struct {
+	softDelete
 	ID           int    `json:"id" gorm:"primaryKey;column:id"`
 	UserID       int    `json:"userId" gorm:"column:user_id"`
 	Consignee    string `json:"consignee" gorm:"column:consignee"`
@@ -115,6 +133,7 @@ type AddressBook struct {
 func (AddressBook) TableName() string { return "address_book" }
 
 type ShoppingCart struct {
+	softDelete
 	ID         int       `json:"id" gorm:"primaryKey;column:id"`
 	Name       string    `json:"name" gorm:"column:name"`
 	Image      string    `json:"image" gorm:"column:image"`
@@ -145,6 +164,7 @@ const (
 )
 
 type Orders struct {
+	softDelete
 	ID             int64      `json:"id" gorm:"primaryKey;column:id"`
 	OrderNumber    string     `json:"orderNumber" gorm:"column:number;uniqueIndex"`
 	Status         int        `json:"status" gorm:"column:status;default:1"`
@@ -170,6 +190,7 @@ type Orders struct {
 func (Orders) TableName() string { return "orders" }
 
 type OrderDetail struct {
+	softDelete
 	ID         int64   `json:"id" gorm:"primaryKey;column:id"`
 	Name       string  `json:"name" gorm:"column:name"`
 	Image      string  `json:"image" gorm:"column:image"`
@@ -244,3 +265,74 @@ type PageResult struct {
 	Total int64       `json:"total"`
 	Data  interface{} `json:"data"`
 }
+
+// ============================================
+// 2026-08-20 新增: 支付/退款/评价/库存预留 流水表
+// 原则: 流水表只追加 INSERT, 不 UPDATE(行业惯例)
+// ============================================
+
+// PaymentLog 支付流水(每次支付请求一条记录)
+type PaymentLog struct {
+	ID              int64   `json:"id" gorm:"primaryKey;column:id"`
+	OrderID         int64   `json:"orderId" gorm:"column:order_id"`
+	UserID          int     `json:"userId" gorm:"column:user_id"`
+	PaymentMethod   int     `json:"paymentMethod" gorm:"column:payment_method"`
+	Amount          float64 `json:"amount" gorm:"column:amount"`
+	TransactionID   string  `json:"transactionId" gorm:"column:transaction_id"`
+	Status          int     `json:"status" gorm:"column:status;default:0"` // 0发起 1成功 2失败 3已退款
+	RequestPayload  string  `json:"requestPayload" gorm:"column:request_payload"`
+	ResponsePayload string  `json:"responsePayload" gorm:"column:response_payload"`
+	CreatedAt       time.Time `json:"createdAt" gorm:"column:created_at"`
+	UpdatedAt       time.Time `json:"updatedAt" gorm:"column:updated_at"`
+}
+
+func (PaymentLog) TableName() string { return "payment_log" }
+
+// RefundLog 退款记录(关联原支付)
+type RefundLog struct {
+	ID              int64   `json:"id" gorm:"primaryKey;column:id"`
+	PaymentLogID    int64   `json:"paymentLogId" gorm:"column:payment_log_id"`
+	OrderID         int64   `json:"orderId" gorm:"column:order_id"`
+	UserID          int     `json:"userId" gorm:"column:user_id"`
+	RefundAmount    float64 `json:"refundAmount" gorm:"column:refund_amount"`
+	RefundReason    string  `json:"refundReason" gorm:"column:refund_reason"`
+	TransactionID   string  `json:"transactionId" gorm:"column:transaction_id"`
+	Status          int     `json:"status" gorm:"column:status;default:0"` // 0发起 1成功 2失败
+	RequestPayload  string  `json:"requestPayload" gorm:"column:request_payload"`
+	ResponsePayload string  `json:"responsePayload" gorm:"column:response_payload"`
+	CreatedAt       time.Time `json:"createdAt" gorm:"column:created_at"`
+	UpdatedAt       time.Time `json:"updatedAt" gorm:"column:updated_at"`
+}
+
+func (RefundLog) TableName() string { return "refund_log" }
+
+// DishReview 菜品原始评分
+// Images 是 JSON 数组字段, 必须存合法 JSON(如 []) 或 NULL, 不能存空字符串
+type DishReview struct {
+	ID          int64     `json:"id" gorm:"primaryKey;column:id"`
+	OrderID     int64     `json:"orderId" gorm:"column:order_id"`
+	UserID      int       `json:"userId" gorm:"column:user_id"`
+	DishID      int       `json:"dishId" gorm:"column:dish_id"`
+	Rating      int       `json:"rating" gorm:"column:rating"` // 1-5 星
+	Content     string    `json:"content" gorm:"column:content"`
+	Images      *string   `json:"images" gorm:"column:images;type:json"` // NULL 或合法 JSON 数组
+	IsAnonymous int       `json:"isAnonymous" gorm:"column:is_anonymous;default:0"`
+	CreatedAt   time.Time `json:"createdAt" gorm:"column:created_at"`
+	UpdatedAt   time.Time `json:"updatedAt" gorm:"column:updated_at"`
+}
+
+func (DishReview) TableName() string { return "dish_review" }
+
+// InventoryReservation 库存预留(秒杀防超卖)
+type InventoryReservation struct {
+	ID        int64     `json:"id" gorm:"primaryKey;column:id"`
+	OrderID   int64     `json:"orderId" gorm:"column:order_id"`
+	DishID    int       `json:"dishId" gorm:"column:dish_id"`
+	Quantity  int       `json:"quantity" gorm:"column:quantity"`
+	Status    int       `json:"status" gorm:"column:status;default:0"` // 0预留中 1已占用 2已释放
+	ExpiresAt time.Time `json:"expiresAt" gorm:"column:expires_at"`
+	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at"`
+	UpdatedAt time.Time `json:"updatedAt" gorm:"column:updated_at"`
+}
+
+func (InventoryReservation) TableName() string { return "inventory_reservation" }

@@ -14,8 +14,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
-# 构建期执行 schema 同步 (这是唯一一次 db push, 不在启动时再跑)
-RUN npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true
+# 数据库结构由 go-service 的 cmd/migrate 管理(见 go-service/migrations/)
+# 这里不再跑 prisma db push, 避免 Prisma 基于不完整 schema 误删列(如 dish.stock/outbox 等)
+# prisma generate 已在 builder 阶段执行, 只需生成 client 即可
+RUN npx prisma generate
 EXPOSE 3000
 # 启动时只跑 seed + main, 不再 db push (防止 Prisma drop 掉 outbox_events 等不在 schema 的表)
 CMD ["sh", "-c", "node prisma/seed.js && node dist/main.js"]

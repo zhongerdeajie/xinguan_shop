@@ -321,3 +321,28 @@ func (r *WriteRepository) IncrDishStock(ctx context.Context, dishID int) (int64,
 	key := fmt.Sprintf("dish:%d:stock", dishID)
 	return r.rdb.Incr(ctx, key).Result()
 }
+
+// ==========================================
+// 支付/退款/评价/库存预留 流水 (2026-08-20 新增)
+// 原则: 流水表只追加 INSERT, 不 UPDATE(行业惯例)
+// ==========================================
+
+// CreatePaymentLog 写支付流水
+func (r *WriteRepository) CreatePaymentLog(ctx context.Context, log *model.PaymentLog) error {
+	return r.db.WithContext(ctx).Create(log).Error
+}
+
+// CreateRefundLog 写退款流水
+func (r *WriteRepository) CreateRefundLog(ctx context.Context, log *model.RefundLog) error {
+	return r.db.WithContext(ctx).Create(log).Error
+}
+
+// CreateDishReview 写菜品评价
+func (r *WriteRepository) CreateDishReview(ctx context.Context, review *model.DishReview) error {
+	return r.db.WithContext(ctx).Create(review).Error
+}
+
+// CreateInventoryReservation 写库存预留记录
+func (r *WriteRepository) CreateInventoryReservation(ctx context.Context, resv *model.InventoryReservation) error {
+	return r.db.WithContext(ctx).Create(resv).Error
+}

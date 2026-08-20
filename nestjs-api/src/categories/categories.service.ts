@@ -19,7 +19,7 @@ export class CategoriesService {
     const key = `categories:${page}:${limit}:${type || ''}:${name || ''}`;
     return cached(key, 15000, async () => {
       const skip = (page - 1) * limit;
-      const where: any = {};
+      const where: any = { deletedAt: null }; // 软删过滤
       if (type) where.type = type;
       if (name) where.name = { contains: name };
 
@@ -45,8 +45,8 @@ export class CategoriesService {
   }
 
   async findOne(id: number) {
-    const category = await this.prisma.category.findUnique({
-      where: { id },
+    const category = await this.prisma.category.findFirst({
+      where: { id, deletedAt: null }, // 软删过滤
       include: {
         dishes: true,
         setmeals: true,
@@ -104,8 +104,10 @@ export class CategoriesService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.category.delete({
+    // 软删
+    return this.prisma.category.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 }

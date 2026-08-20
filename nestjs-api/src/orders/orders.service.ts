@@ -39,7 +39,7 @@ export class OrdersService {
     number?: string,
   ) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: any = { deletedAt: null }; // 软删过滤
     if (status) where.status = status;
     if (userId) where.userId = userId;
     if (number) where.number = { contains: number };
@@ -75,8 +75,8 @@ export class OrdersService {
   }
 
   async findOne(id: number) {
-    const order = await this.prisma.orders.findUnique({
-      where: { id },
+    const order = await this.prisma.orders.findFirst({
+      where: { id, deletedAt: null }, // 软删过滤
       include: {
         user: { select: { id: true, name: true, phone: true, avatar: true, sex: true } },
         addressBook: true,
@@ -171,15 +171,13 @@ export class OrdersService {
 
   async remove(id: number, operatorId?: number) {
     await this.findOne(id);
-    await this.prisma.orderDetail.deleteMany({
-      where: { orderId: id },
-    });
-    // 删除前最后一次审计日志（注意：prisma.orders.delete 不接受 updateUser 字段，这里只做日志记录）
+    // 订单软删(历史订单/明细属于审计, 保留不物理删除)
     if (operatorId) {
       console.log(`[AUDIT] admin ${operatorId} deleted order ${id} at ${new Date().toISOString()}`);
     }
-    return this.prisma.orders.delete({
+    return this.prisma.orders.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 

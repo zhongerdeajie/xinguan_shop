@@ -31,7 +31,7 @@ export class DishesService {
     const key = `dishes:${page}:${limit}:${name || ''}:${categoryId || ''}`;
     return cached(key, 15000, async () => {
       const skip = (page - 1) * limit;
-      const where: any = {};
+      const where: any = { deletedAt: null }; // 软删过滤
       if (name) where.name = { contains: name };
       if (categoryId) where.categoryId = categoryId;
 
@@ -61,8 +61,8 @@ export class DishesService {
   }
 
   async findOne(id: number) {
-    const dish = await this.prisma.dish.findUnique({
-      where: { id },
+    const dish = await this.prisma.dish.findFirst({
+      where: { id, deletedAt: null }, // 软删过滤
       include: {
         category: true,
         flavors: true,
@@ -140,8 +140,10 @@ export class DishesService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.dish.delete({
+    // 软删: 物理删除改 UPDATE deleted_at = NOW()
+    return this.prisma.dish.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 }

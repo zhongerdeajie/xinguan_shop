@@ -99,8 +99,10 @@ export class AddressesService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.addressBook.delete({
+    // 软删
+    return this.prisma.addressBook.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 }

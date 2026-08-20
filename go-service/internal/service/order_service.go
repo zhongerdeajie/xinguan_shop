@@ -267,6 +267,19 @@ func (s *OrderService) PayOrder(ctx context.Context, userID int, dto model.Order
 		return fmt.Errorf("支付失败: %w", err)
 	}
 
+	// 支付流水(只追加, 行业惯例)
+	// 失败不影响支付主流程, 流水只做审计/对账用途
+	_ = s.repo.CreatePaymentLog(ctx, &model.PaymentLog{
+		OrderID:       order.ID,
+		UserID:        order.UserID,
+		PaymentMethod: dto.PayMethod,
+		Amount:        order.Amount,
+		Status:        1, // 成功
+		TransactionID: generateTransactionID(),
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	})
+
 	return nil
 }
 
@@ -296,6 +309,30 @@ func (s *OrderService) RefundOrder(ctx context.Context, userID int, orderID int6
 	if err := s.repo.RefundOrder(ctx, orderID, "用户申请退款"); err != nil {
 		return fmt.Errorf("退款失败: %w", err)
 	}
+
+	// 退款流水(只追加, 行业惯例)
+	// 失败不影响退款主流程, 流水只做审计/对账用途
+	// 用 Find 避免 First 的 record not found 警告(该订单可能没有支付流水)
+	var paymentLogs []model.PaymentLog
+	_ = s.repo.GetDB().WithContext(ctx).
+		Where("order_id = ? AND status = 1", orderID).
+		Order("id DESC").Limit(1).Find(&paymentLogs).Error
+	var paymentLogID int64
+	if len(paymentLogs) > 0 {
+		paymentLogID = paymentLogs[0].ID
+	}
+	_ = s.repo.CreateRefundLog(ctx, &model.RefundLog{
+		PaymentLogID:  paymentLogID,
+		OrderID:       orderID,
+		UserID:        order.UserID,
+		RefundAmount:  order.Amount,
+		RefundReason:  "用户申请退款",
+		TransactionID: generateTransactionID(),
+		Status:        1, // 成功
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	})
+
 	return nil
 }
 
@@ -394,6 +431,16 @@ func generateOrderNumber() string {
 	return fmt.Sprintf("%s%04d",
 		now.Format("20060102150405"),
 		rand.Intn(10000),
+	)
+}
+
+// generateTransactionID 生成第三方交易流水号(模拟)
+// 真实场景接入支付平台后, 这是微信/支付宝返回的交易号
+func generateTransactionID() string {
+	now := time.Now()
+	return fmt.Sprintf("PAY%s%06d",
+		now.Format("20060102150405"),
+		rand.Intn(1000000),
 	)
 }
 

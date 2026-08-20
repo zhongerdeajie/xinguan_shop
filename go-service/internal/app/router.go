@@ -16,6 +16,7 @@ import (
 	"go-service/internal/app/health"
 	"go-service/internal/app/order"
 	"go-service/internal/app/payment"
+	"go-service/internal/app/review"
 	"go-service/internal/app/setmeal"
 	"go-service/internal/app/user"
 	"go-service/internal/middleware"
@@ -79,6 +80,11 @@ func Register(r *gin.Engine, d appdeps.Deps) {
 	authH := health.NewHandler(d.DB)
 	auth.GET("/categories", authH.Categories)
 
+	// 菜品评价: 公开查某菜品的评价
+	// 注意: 必须用 :id 与已有 /dishes/:id 保持同层同名通配符, 否则 Gin 报路由冲突
+	reviewH := review.NewHandler(d.DB, svcs)
+	auth.GET("/dishes/:id/reviews", reviewH.List)
+
 	customer := auth.Group("")
 	customer.Use(middleware.RequireTokenType("customer"))
 	{
@@ -117,5 +123,9 @@ func Register(r *gin.Engine, d appdeps.Deps) {
 			paymentG.POST("/pay", paymentH.Pay)
 			paymentG.POST("/refund/:orderId", paymentH.Refund)
 		}
+
+		// 顾客提交菜品评价
+		reviewH := review.NewHandler(d.DB, svcs)
+		customer.POST("/reviews", reviewH.Create)
 	}
 }

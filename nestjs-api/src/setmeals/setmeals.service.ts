@@ -9,7 +9,7 @@ export class SetmealsService {
 
   async findAll(page: number, limit: number, name?: string, categoryId?: number) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: any = { deletedAt: null }; // 软删过滤
     if (name) where.name = { contains: name };
     if (categoryId) where.categoryId = categoryId;
 
@@ -38,8 +38,8 @@ export class SetmealsService {
   }
 
   async findOne(id: number) {
-    const setmeal = await this.prisma.setmeal.findUnique({
-      where: { id },
+    const setmeal = await this.prisma.setmeal.findFirst({
+      where: { id, deletedAt: null }, // 软删过滤
       include: {
         category: true,
         setmealDishes: {
@@ -102,8 +102,10 @@ export class SetmealsService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.setmeal.delete({
+    // 软删
+    return this.prisma.setmeal.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 }

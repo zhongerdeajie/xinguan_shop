@@ -24,6 +24,10 @@ export class UsersService {
   }
 
   async remove(id: number) {
-    return this.prisma.user.delete({ where: { id } });
+    // 软删
+    return this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }
