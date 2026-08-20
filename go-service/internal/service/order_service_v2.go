@@ -430,7 +430,7 @@ func (s *OrderServiceV2) afterRefund(order model.Orders, details []model.OrderDe
         INSERT INTO outbox_events
             (aggregate, aggregate_id, event_type, payload, status, created_at)
         VALUES (?, ?, ?, CAST(? AS JSON), 0, NOW(3))
-    `, "order", order.ID, EventOrderRefunded, payload).Error; err != nil {
+    `, "order", order.ID, EventOrderRefunded, string(payload)).Error; err != nil {
 		fmt.Printf("[CRITICAL] 写退款 outbox 事件失败 order=%d err=%v\n", order.ID, err)
 	}
 }

@@ -22,14 +22,14 @@ func NewHandler(svcs appdeps.Services) *Handler {
 	return &Handler{svcs: svcs}
 }
 
-// useV2 灰度开关: 环境变量 USE_ORDER_V2=1 时切换到 OrderServiceV2
+// useV2 已硬编码切换: 默认走 OrderServiceV2(生产级最终一致)
 //
 // 切换理由:
 //   - OrderServiceV2 实现"Redis Lua 预扣 + MySQL 事务 + Outbox 事件"的最终一致
 //   - 旧 OrderService 仍是半截补偿, 是上一版的兼容路径
-//   - 灰度开关便于快速回滚(只需去掉环境变量)
+//   - 保留 USE_ORDER_V2=0 环境变量作为紧急回滚开关(默认走 v2)
 func useV2() bool {
-	return os.Getenv("USE_ORDER_V2") == "1"
+	return os.Getenv("USE_ORDER_V2") != "0"
 }
 
 // Submit creates an order from the cart contents of the authenticated user.

@@ -30,8 +30,9 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MYSQL_DATABASE=starselect
       - JWT_SECRET=${JWT_SECRET}
-      # 灰度开关: 设为 1 切换到 OrderServiceV2(Outbox + Lua 预扣)
-      - USE_ORDER_V2=${USE_ORDER_V2:-0}
+      # 已硬编码默认走 OrderServiceV2(Outbox + Lua 预扣)
+      # 紧急回滚: USE_ORDER_V2=0 切回老 OrderService
+      - USE_ORDER_V2=${USE_ORDER_V2:-1}
     depends_on:
       - redis
       - mysql

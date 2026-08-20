@@ -24,7 +24,7 @@ func NewHandler(svcs appdeps.Services) *Handler {
 }
 
 func useV2() bool {
-	return os.Getenv("USE_ORDER_V2") == "1"
+	return os.Getenv("USE_ORDER_V2") != "0"
 }
 
 // Pay marks an order as paid.
