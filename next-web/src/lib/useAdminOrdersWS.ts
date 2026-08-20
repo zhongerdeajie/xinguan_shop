@@ -62,6 +62,17 @@ export function useAdminOrdersWS(opts: {
       onNewOrder?.(order);
     });
 
+    // 断线重连后,后端补拉历史订单(防止断线期间漏掉推送)
+    // 后端在 handleConnection 时从 Redis Stream order:events 取最近 N 条
+    socket.on('order:history', (data: { orders: AdminOrderEvent[] }) => {
+      if (!data?.orders?.length) return;
+      // 逐个交给 onNewOrder,让上层(页面)处理(如 toast / 刷新列表)
+      data.orders.forEach((order) => {
+        setLastNewOrder(order);
+        onNewOrder?.(order);
+      });
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;

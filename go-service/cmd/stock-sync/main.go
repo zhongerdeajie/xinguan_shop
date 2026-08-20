@@ -18,10 +18,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -170,6 +173,11 @@ func scanOnce(ctx context.Context, db *pkgmysql.DB, rdb *pkgredis.Client, m *Met
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// 先构建"有未确认预占的菜品集合"
+	// 这些菜品的 Redis 库存比 MySQL 多(预扣了但没确认), 校准会吃掉预占导致超卖
+	// 所以有 pending 的菜品必须跳过覆盖, 等 outbox-worker 处理
+	pendingDishes := collectPendingDishes(ctx2, rdb)
+
 	pipe := rdb.Pipeline()
 	cmds := make([]*redis.StringCmd, len(dishes))
 	for i, d := range dishes {
@@ -213,10 +221,14 @@ func scanOnce(ctx context.Context, db *pkgmysql.DB, rdb *pkgredis.Client, m *Met
 		auditDrift(ctx, db, d.ID, d.Stock, int(redisStock), drift, "auto_scan")
 
 		if drift > 0 {
-			// Redis 比 MySQL 多 → IncrBy 让 Redis 跟 MySQL 对齐
-			// 说明: 这种漂移通常意味着 Redis 有库存被"占用但没提交"(pending 还在)
-			// 安全做法: 等 outbox-worker 处理完再校准; 这里先打个标记
-			// 简单做法: 直接 IncrBy 补偿差额, 让两边对齐
+			// Redis 比 MySQL 多
+			// 两种情况:
+			//   a) 有未确认预占(pending 还在) → 跳过, 等 outbox-worker 处理
+			//   b) 无 pending(历史脏数据/手动改 Redis) → 覆盖对齐 MySQL
+			if pendingDishes[d.ID] {
+				log.Printf("⏸️  菜品 %d 有未确认预占, 跳过校准(等 outbox-worker 处理)", d.ID)
+				continue
+			}
 			newVal := int64(d.Stock)
 			if err := rdb.Set(ctx2, keyFor(d.ID), newVal, 24*time.Hour).Err(); err != nil {
 				log.Printf("补偿菜品 %d 失败: %v", d.ID, err)
@@ -228,6 +240,57 @@ func scanOnce(ctx context.Context, db *pkgmysql.DB, rdb *pkgredis.Client, m *Met
 		// drift < 0 (Redis 比 MySQL 少) → 不能盲目加, 让人工处理
 		// (可能是真卖多了, 也可能是 Redis 被清空; 都要查)
 	}
+}
+
+// collectPendingDishes 扫描 pending:order, 返回所有有未确认预占的 dish_id 集合
+//
+// pending value 是 JSON: {"entries":["dish:1:stock:2",...],"ts":...}
+// 解析出所有 dish:{id}:stock 前缀, 提取 dish_id
+func collectPendingDishes(ctx context.Context, rdb *pkgredis.Client) map[int]bool {
+	result := make(map[int]bool)
+	vals, err := rdb.HVals(ctx, "pending:order").Result()
+	if err != nil {
+		log.Printf("collectPendingDishes: 读 pending 失败: %v", err)
+		return result
+	}
+	for _, v := range vals {
+		var decoded struct {
+			Entries []string `json:"entries"`
+		}
+		if err := json.Unmarshal([]byte(v), &decoded); err != nil {
+			// 兼容旧格式(单字符串 "dish:1:stock:2")
+			if id := parseDishIDFromEntry(v); id > 0 {
+				result[id] = true
+			}
+			continue
+		}
+		for _, entry := range decoded.Entries {
+			if id := parseDishIDFromEntry(entry); id > 0 {
+				result[id] = true
+			}
+		}
+	}
+	return result
+}
+
+// parseDishIDFromEntry 从 "dish:42:stock:2" 提取 42
+func parseDishIDFromEntry(entry string) int {
+	// 格式: dish:{id}:stock:{n}
+	prefix := "dish:"
+	if !strings.HasPrefix(entry, prefix) {
+		return 0
+	}
+	rest := strings.TrimPrefix(entry, prefix)
+	// rest 形如 "42:stock:2"
+	colon := strings.Index(rest, ":")
+	if colon <= 0 {
+		return 0
+	}
+	id, err := strconv.Atoi(rest[:colon])
+	if err != nil {
+		return 0
+	}
+	return id
 }
 
 func keyFor(dishID int) string {

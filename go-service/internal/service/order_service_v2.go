@@ -403,18 +403,10 @@ func (s *OrderServiceV2) afterRefund(order model.Orders, details []model.OrderDe
 		fmt.Printf("[CRITICAL] 退款回补 MySQL 库存失败 order=%d err=%v\n", order.ID, err)
 	}
 
-	// 2) ReleaseStock(用 pending 集合精确释放; 旧菜品可能没有 pending, 这里再补一次 IncrBy)
-	for _, d := range details {
-		if d.DishID == nil {
-			continue
-		}
-		key := fmt.Sprintf("dish:%d:stock", *d.DishID)
-		//  如果 pending 里有这个 order, ReleaseStock 就会自动 IncrBy
-		if _, err := s.rdb.ReleaseStock(bgCtx, order.OrderNumber); err != nil {
-			fmt.Printf("[WARN] ReleaseStock 失败 order=%s err=%v\n", order.OrderNumber, err)
-		}
-		_ = key
-		break // ReleaseStock 已经按 order_no 反查一次, 不用每个 dish 都调
+	// 2) ReleaseStock(用 pending 集合精确释放, v2 支持多菜品一次回补)
+	//    注意: 如果 pending 已被 ConfirmStock 清掉(订单已确认), ReleaseStock 返回 0 是正常的
+	if _, err := s.rdb.ReleaseStock(bgCtx, order.OrderNumber); err != nil {
+		fmt.Printf("[WARN] ReleaseStock 失败 order=%s err=%v\n", order.OrderNumber, err)
 	}
 
 	// 3) 写 outbox 事件(让 worker 推 WebSocket)
@@ -466,11 +458,19 @@ func (s *OrderServiceV2) CancelOrder(ctx context.Context, userID int, dto model.
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		// 释放 Redis 预占
-		s.rdb.ReleaseStock(bgCtx, order.OrderNumber)
-		// 如果已支付, 还需要在事务里把钱退给用户(支付系统对接, 此处仅示意)
+		// 释放 Redis 预占(v2 支持多菜品一次回补)
+		if _, err := s.rdb.ReleaseStock(bgCtx, order.OrderNumber); err != nil {
+			fmt.Printf("[WARN] 取消订单 ReleaseStock 失败 order=%s err=%v\n", order.OrderNumber, err)
+		}
+		// 已支付订单取消 → 标记退款
+		// 注意: 当前支付是模拟支付(无真实资金流转), 所以"退款"= 改 pay_status + 记录事件
+		// 若接入真实支付网关, 这里应调用支付平台退款 API, 且必须等退款成功再回补库存
 		if order.PayStatus == model.PayPaid {
-			_ = order.Amount
+			if err := s.repo.GetDB().WithContext(bgCtx).Exec(`
+                UPDATE orders SET pay_status = ? WHERE id = ?
+            `, model.PayRefund, order.ID).Error; err != nil {
+				fmt.Printf("[CRITICAL] 取消已支付订单标记退款失败 order=%d err=%v\n", order.ID, err)
+			}
 		}
 		// 回补 MySQL 库存
 		if err := s.repo.GetDB().WithContext(bgCtx).Transaction(func(tx *gorm.DB) error {

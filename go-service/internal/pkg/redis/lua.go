@@ -78,10 +78,11 @@ func DefaultKeys(dishID int64) StockKeys {
 //   - ErrInvalidArgument:   number <= 0
 func (c *Client) PreDeductStock(ctx context.Context, dishID int64, number int, orderNo string, initValue int) (int64, error) {
 	keys := DefaultKeys(dishID)
+	nowTS := time.Now().Unix() // Go 层传时间戳, Lua 里不能用 redis.call('TIME')
 	res, err := preDeductScript.Run(
 		ctx, c.Client,
 		[]string{keys.Stock, keys.Pending},
-		number, orderNo, initValue,
+		number, orderNo, initValue, nowTS,
 	).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("pre_deduct 脚本执行失败: %w", err)
@@ -127,15 +128,24 @@ func (c *Client) ReleaseStock(ctx context.Context, orderNo string) (int64, error
 	return res, nil
 }
 
-// RecoverAllPending 全量释放 pending(谨慎使用, 一般由 worker 在异常时调用)
+// RecoverExpiredPending 释放超时未确认的 pending 预占
 //
-// 正常情况下应该按 order_no 精确释放, 不该一次清空。
-// 这个函数给运营手工恢复使用。
-func (c *Client) RecoverAllPending(ctx context.Context) (int64, error) {
+// 由 outbox-worker 定时调用(每 5 分钟), 只释放超过 maxAge 秒的订单。
+// 正在处理中的订单(未超时)不受影响。
+//
+// 参数:
+//   - maxAgeSeconds: 超时阈值, 默认 1800(30 分钟)
+//
+// 返回值: 释放的库存条目数
+func (c *Client) RecoverExpiredPending(ctx context.Context, maxAgeSeconds int) (int64, error) {
+	if maxAgeSeconds <= 0 {
+		maxAgeSeconds = 1800
+	}
+	nowTS := time.Now().Unix()
 	res, err := recoverPendingScript.Run(
 		ctx, c.Client,
 		[]string{"pending:order"},
-		1800,
+		maxAgeSeconds, nowTS,
 	).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("recover_pending 脚本执行失败: %w", err)

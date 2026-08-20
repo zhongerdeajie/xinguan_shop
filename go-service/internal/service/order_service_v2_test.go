@@ -66,12 +66,34 @@ func newTestService(t *testing.T) (*OrderServiceV2, *pkgmysql.DB, *pkgredis.Clie
 	require.NoError(t, err, "MySQL 连接失败")
 	rdb, err := pkgredis.NewClient(cfg.Redis)
 	require.NoError(t, err, "Redis 连接失败")
+	// 记录 dish.stock 原值
+	snapshotDishStock(t, db)
 	repo := repository.NewWriteRepository(db, rdb)
 	svc := NewOrderServiceV2(repo, rdb)
 	return svc, db, rdb
 }
 
+// restoreDishStock 测试结束后恢复 dish.stock 到测试前的 originalDishStock
+func restoreDishStock(t *testing.T, db *pkgmysql.DB) {
+	t.Helper()
+	if originalDishStock > 0 {
+		_ = db.Exec(`UPDATE dish SET stock = ?, version = 0 WHERE id = ?`, originalDishStock, testDish).Error
+	}
+}
+
+// 测试用固定基准库存(每个测试开始时设置为该值, 断言基于它, 可重复)
+const testBaseStock = 100
+
+// 测试前记录 dish.stock 原值, 测试后恢复(避免污染真实库存)
+// 注意: 记录时机是每个测试的 newTestService 调用时
+var originalDishStock int
+
 // cleanupTestData 清理测试数据(幂等) + 确保测试用户存在
+//
+// 隔离策略:
+//   - 独立 user_id(9999/9998/9997) 避免污染真实订单
+//   - Redis DB 15 隔离
+//   - dish.stock 每个测试开始时设为固定基准(testBaseStock), 测试后恢复 originalDishStock
 func cleanupTestData(t *testing.T, db *pkgmysql.DB, rdb *pkgredis.Client) {
 	t.Helper()
 	ctx := context.Background()
@@ -86,14 +108,23 @@ func cleanupTestData(t *testing.T, db *pkgmysql.DB, rdb *pkgredis.Client) {
 	_ = db.Exec(`DELETE FROM address_book WHERE user_id IN (?, ?, ?)`, testUserA, testUserB, testUserC).Error
 	// 清理 Redis
 	_ = rdb.Del(ctx, fmt.Sprintf("dish:%d:stock", testDish), "pending:order").Err()
-	// 重置菜品库存
-	_ = db.Exec(`UPDATE dish SET stock = 50, version = 0 WHERE id = ?`, testDish).Error
+	// 每个测试开始时, 把 dish:testDish 设为固定基准库存
+	_ = db.Exec(`UPDATE dish SET stock = ?, version = 0 WHERE id = ?`, testBaseStock, testDish).Error
 	// 确保测试用户存在(外键约束: shopping_cart.user_id -> user.id)
 	for _, uid := range []int{testUserA, testUserB, testUserC} {
 		_ = db.Exec(`
             INSERT IGNORE INTO user (id, name, phone, create_time)
             VALUES (?, ?, ?, NOW())
         `, uid, fmt.Sprintf("测试用户%d", uid), fmt.Sprintf("139%08d", uid)).Error
+	}
+}
+
+// snapshotDishStock 记录 dish.stock 原值(每个测试开始时调用, 覆盖旧值)
+func snapshotDishStock(t *testing.T, db *pkgmysql.DB) {
+	t.Helper()
+	_ = db.Raw(`SELECT stock FROM dish WHERE id = ?`, testDish).Scan(&originalDishStock).Error
+	if originalDishStock <= 0 {
+		originalDishStock = 50 // 兜底
 	}
 }
 
@@ -137,13 +168,15 @@ func TestSubmitOrder_Success(t *testing.T) {
 	svc, db, rdb := newTestService(t)
 	defer db.Close()
 	defer rdb.Close()
+	// restoreDishStock 后注册, defer LIFO 保证它在 db.Close() 之前执行
+	defer restoreDishStock(t, db)
 	cleanupTestData(t, db, rdb)
 	defer cleanupTestData(t, db, rdb)
 
 	ctx := context.Background()
 
-	// 准备: 库存 50 + 购物车 2 份 + 地址
-	require.NoError(t, rdb.Set(ctx, fmt.Sprintf("dish:%d:stock", testDish), 50, 24*time.Hour).Err())
+	// 准备: 库存 testBaseStock + 购物车 2 份 + 地址
+	require.NoError(t, rdb.Set(ctx, fmt.Sprintf("dish:%d:stock", testDish), testBaseStock, 24*time.Hour).Err())
 	seedCart(t, db, testUserA, testDish, 2)
 	addressID := seedAddress(t, db, testUserA)
 
@@ -154,10 +187,10 @@ func TestSubmitOrder_Success(t *testing.T) {
 	require.NotNil(t, order)
 	require.NotEmpty(t, order.OrderNumber)
 
-	// 验证 1: Redis 库存 50 → 48
+	// 验证 1: Redis 库存 testBaseStock → testBaseStock-2
 	redisStock, err := rdb.Get(ctx, fmt.Sprintf("dish:%d:stock", testDish)).Int64()
 	require.NoError(t, err)
-	require.Equal(t, int64(48), redisStock, "Redis 库存应减 2")
+	require.Equal(t, int64(testBaseStock-2), redisStock, "Redis 库存应减 2")
 
 	// 验证 2: pending 已清(ConfirmStock 是异步 goroutine, 等它跑完)
 	time.Sleep(500 * time.Millisecond)
@@ -165,10 +198,10 @@ func TestSubmitOrder_Success(t *testing.T) {
 	require.Error(t, err, "pending 应已被 HDEL")
 	require.Empty(t, pending)
 
-	// 验证 3: MySQL dish.stock 50 → 48
+	// 验证 3: MySQL dish.stock testBaseStock → testBaseStock-2
 	var mysqlStock int
 	require.NoError(t, db.Raw(`SELECT stock FROM dish WHERE id = ?`, testDish).Scan(&mysqlStock).Error)
-	require.Equal(t, 48, mysqlStock, "MySQL 库存应减 2")
+	require.Equal(t, testBaseStock-2, mysqlStock, "MySQL 库存应减 2")
 
 	// 验证 4: outbox 事件已写
 	var outboxCount int64
@@ -183,7 +216,7 @@ func TestSubmitOrder_Success(t *testing.T) {
 	require.NoError(t, db.Raw(`SELECT COUNT(*) FROM shopping_cart WHERE user_id = ?`, testUserA).Scan(&cartCount).Error)
 	require.Equal(t, int64(0), cartCount, "购物车应被清空")
 
-	t.Logf("✅ TestSubmitOrder_Success: order=%s redis=48 mysql=48 outbox=1", order.OrderNumber)
+	t.Logf("✅ TestSubmitOrder_Success: order=%s redis=%d mysql=%d outbox=1", order.OrderNumber, testBaseStock-2, testBaseStock-2)
 }
 
 // TestSubmitOrder_StockInsufficient 验证库存不足时 Lua 拒绝 + 不写 MySQL
@@ -192,6 +225,7 @@ func TestSubmitOrder_StockInsufficient(t *testing.T) {
 	svc, db, rdb := newTestService(t)
 	defer db.Close()
 	defer rdb.Close()
+	defer restoreDishStock(t, db)
 	cleanupTestData(t, db, rdb)
 	defer cleanupTestData(t, db, rdb)
 
@@ -213,10 +247,10 @@ func TestSubmitOrder_StockInsufficient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), redisStock, "Redis 库存应保持 1")
 
-	// 验证 2: MySQL dish.stock 没变(50)
+	// 验证 2: MySQL dish.stock 没变(testBaseStock)
 	var mysqlStock int
 	require.NoError(t, db.Raw(`SELECT stock FROM dish WHERE id = ?`, testDish).Scan(&mysqlStock).Error)
-	require.Equal(t, 50, mysqlStock, "MySQL 库存不应变")
+	require.Equal(t, testBaseStock, mysqlStock, "MySQL 库存不应变")
 
 	// 验证 3: 没有订单
 	var orderCount int64
@@ -241,13 +275,14 @@ func TestRefundOrder(t *testing.T) {
 	svc, db, rdb := newTestService(t)
 	defer db.Close()
 	defer rdb.Close()
+	defer restoreDishStock(t, db)
 	cleanupTestData(t, db, rdb)
 	defer cleanupTestData(t, db, rdb)
 
 	ctx := context.Background()
 
 	// 准备: 先下一单(库存 50 → 47, 3 份)
-	require.NoError(t, rdb.Set(ctx, fmt.Sprintf("dish:%d:stock", testDish), 50, 24*time.Hour).Err())
+	require.NoError(t, rdb.Set(ctx, fmt.Sprintf("dish:%d:stock", testDish), testBaseStock, 24*time.Hour).Err())
 	seedCart(t, db, testUserC, testDish, 3)
 	addressID := seedAddress(t, db, testUserC)
 	dto := model.OrderSubmitDTO{AddressBookID: addressID, PayMethod: 1}
@@ -272,10 +307,10 @@ func TestRefundOrder(t *testing.T) {
 	// 等 goroutine 跑完(异步回补)
 	time.Sleep(800 * time.Millisecond)
 
-	// 验证 2: MySQL dish.stock 回补 47 → 50
+	// 验证 2: MySQL dish.stock 回补 (testBaseStock-3) → testBaseStock
 	var mysqlStock int
 	require.NoError(t, db.Raw(`SELECT stock FROM dish WHERE id = ?`, testDish).Scan(&mysqlStock).Error)
-	require.Equal(t, 50, mysqlStock, "MySQL 库存应回补到 50")
+	require.Equal(t, testBaseStock, mysqlStock, "MySQL 库存应回补到 testBaseStock")
 
 	// 验证 3: outbox 有退款事件
 	var outboxCount int64
@@ -285,5 +320,5 @@ func TestRefundOrder(t *testing.T) {
     `, order.ID).Scan(&outboxCount).Error)
 	require.Equal(t, int64(1), outboxCount, "应有 1 条 order.refunded 事件")
 
-	t.Logf("✅ TestRefundOrder: 状态已改, 库存回补 50, outbox=1")
+	t.Logf("✅ TestRefundOrder: 状态已改, 库存回补 %d, outbox=1", testBaseStock)
 }

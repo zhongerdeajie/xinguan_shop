@@ -107,6 +107,10 @@ func (w *Worker) ensureConsumerGroup(ctx context.Context) error {
 func (w *Worker) run(ctx context.Context) {
 	ticker := time.NewTicker(w.tick)
 	defer ticker.Stop()
+	// 独立的 pending 超时清理 ticker(每 5 分钟)
+	// 释放超过 30 分钟未确认的预占库存(订单超时未支付/ConfirmStock 失败残留)
+	recoverTicker := time.NewTicker(5 * time.Minute)
+	defer recoverTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -115,8 +119,24 @@ func (w *Worker) run(ctx context.Context) {
 			if err := w.tickOnce(ctx); err != nil {
 				log.Printf("tick 处理失败: %v", err)
 			}
+		case <-recoverTicker.C:
+			if err := w.recoverExpiredPending(ctx); err != nil {
+				log.Printf("recoverExpiredPending 失败: %v", err)
+			}
 		}
 	}
+}
+
+// recoverExpiredPending 释放超时未确认的预占库存
+func (w *Worker) recoverExpiredPending(ctx context.Context) error {
+	released, err := w.rdb.RecoverExpiredPending(ctx, 1800) // 30 分钟
+	if err != nil {
+		return err
+	}
+	if released > 0 {
+		log.Printf("⏰ 释放 %d 条超时未确认的预占库存", released)
+	}
+	return nil
 }
 
 func (w *Worker) tickOnce(ctx context.Context) error {
@@ -150,9 +170,6 @@ func (w *Worker) tickOnce(ctx context.Context) error {
 		w.markProcessed(ctx, r.ID)
 	}
 
-	// 同时: 把刚才 XADD 的事件"投递"出去给真正的消费者
-	// 这一步其实是另一个组件的责任(比如 WebSocket fanout 服务)
-	// 这里只演示 Stream 写入, 不做实际投递
 	return nil
 }
 
@@ -164,7 +181,10 @@ func (w *Worker) handle(ctx context.Context, r struct {
 	Payload     []byte
 	RetryCount  int
 }) error {
-	// 1) 投递到 Redis Stream (下游消费者: WebSocket / 通知 / BI)
+	// 1) 投递到 Redis Stream (持久化事件日志)
+	//    用途: 审计 / 重放 / 未来 BI 分析
+	//    实时推送走 Redis Pub/Sub(order:new 频道, 见 order_service_v2.go)
+	//    Stream 与 Pub/Sub 职责分离: Stream 持久化, Pub/Sub 实时
 	values := map[string]interface{}{
 		"event_type":   r.EventType,
 		"aggregate":    r.Aggregate,
