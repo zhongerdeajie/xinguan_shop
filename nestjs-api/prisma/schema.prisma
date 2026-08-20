@@ -133,6 +133,10 @@ model User {
   idNumber   String?   @db.VarChar(18) @map("id_number")
   avatar     String?   @db.VarChar(500)
   createTime DateTime? @map("create_time") @db.DateTime
+  // 2026-08-20 0003 加: 软删字段(应用层维护 deleted_at)
+  deletedAt  DateTime? @map("deleted_at") @db.DateTime(3)
+  // 2026-08-20 0003 加: generated column (数据库维护, 应用层只读)
+  active     Int?      @ignore
 
   addresses   AddressBook[]
   orders      Orders[]
@@ -196,6 +200,8 @@ model UserCoupon {
   status      Int       @default(0) // 0 未使用 1 已使用
   claimedTime DateTime  @map("claimed_time") @db.DateTime
   usedTime    DateTime? @map("used_time") @db.DateTime
+  deletedAt   DateTime? @map("deleted_at") @db.DateTime(3)
+  active      Int?      @ignore
 
   user   User   @relation(fields: [userId], references: [id])
   coupon Coupon @relation(fields: [couponId], references: [id])
@@ -207,6 +213,8 @@ model UserCoupon {
 model AddressBook {
   id            Int       @id @default(autoincrement())
   userId        Int       @map("user_id")
+  deletedAt     DateTime? @map("deleted_at") @db.DateTime(3)
+  active        Int?      @ignore
   consignee     String?   @db.VarChar(50)
   sex           String?   @db.VarChar(2)
   phone         String    @db.VarChar(11)
@@ -363,13 +371,12 @@ model PaymentLog {
   responsePayload String?  @db.Text @map("response_payload")
   createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  isDeleted       Int      @default(0) @map("is_deleted")
   deletedAt       DateTime? @map("deleted_at") @db.DateTime(3)
 
   @@index([orderId], name: "idx_paylog_order")
   @@index([userId, createdAt], name: "idx_paylog_user_created")
   @@index([status], name: "idx_paylog_status")
-  @@index([isDeleted], name: "idx_paylog_is_deleted")
+  @@index([deletedAt], name: "idx_paylog_deleted")
   @@map("payment_log")
 }
 
@@ -386,13 +393,12 @@ model RefundLog {
   responsePayload String?  @db.Text @map("response_payload")
   createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  isDeleted       Int      @default(0) @map("is_deleted")
   deletedAt       DateTime? @map("deleted_at") @db.DateTime(3)
 
   @@index([orderId], name: "idx_refund_order")
   @@index([paymentLogId], name: "idx_refund_payment_log")
   @@index([userId, createdAt], name: "idx_refund_user_created")
-  @@index([isDeleted], name: "idx_refund_is_deleted")
+  @@index([deletedAt], name: "idx_refund_deleted")
   @@map("refund_log")
 }
 
@@ -407,13 +413,12 @@ model DishReview {
   isAnonymous Int      @default(0) @map("is_anonymous")
   createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  isDeleted   Int      @default(0) @map("is_deleted")
   deletedAt   DateTime? @map("deleted_at") @db.DateTime(3)
 
   @@index([dishId, createdAt], name: "idx_review_dish_created")
   @@index([userId], name: "idx_review_user")
   @@index([orderId], name: "idx_review_order")
-  @@index([isDeleted], name: "idx_review_is_deleted")
+  @@index([deletedAt], name: "idx_review_deleted")
   @@map("dish_review")
 }
 
@@ -441,4 +446,23 @@ model AddressLog {
   @@index([addressId], name: "idx_addrlog_address")
   @@index([userId, createdAt], name: "idx_addrlog_user_created")
   @@map("address_log")
+}
+
+// 2026-08-20 新增: 库存预留表(秒杀防超卖)
+model InventoryReservation {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId   BigInt   @map("order_id") @db.UnsignedBigInt
+  dishId    Int      @map("dish_id")
+  quantity  Int
+  status    Int      @default(0) @map("status")
+  expiresAt DateTime @map("expires_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt DateTime? @map("deleted_at") @db.DateTime(3)
+
+  @@index([orderId], name: "idx_resv_order")
+  @@index([dishId, status], name: "idx_resv_dish_status")
+  @@index([expiresAt, status], name: "idx_resv_expires")
+  @@index([deletedAt], name: "idx_resv_deleted")
+  @@map("inventory_reservation")
 }
