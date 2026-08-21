@@ -31,6 +31,7 @@ next-env.d.ts
 .tmp_*.bat
 .tmp_*.js
 .tmp_*.sql
+.tmp_*.txt
 
 # Go 本地编译产物(Windows .exe 与 Linux 二进制)
 go-service/migrate.exe
