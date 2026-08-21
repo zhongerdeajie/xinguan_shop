@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -28,6 +29,7 @@ import (
 	pkgmysql "go-service/internal/pkg/mysql"
 	pkgredis "go-service/internal/pkg/redis"
 	"go-service/internal/service"
+	"gorm.io/gorm"
 )
 
 const (
@@ -111,6 +113,10 @@ func (w *Worker) run(ctx context.Context) {
 	// 释放超过 30 分钟未确认的预占库存(订单超时未支付/ConfirmStock 失败残留)
 	recoverTicker := time.NewTicker(5 * time.Minute)
 	defer recoverTicker.Stop()
+	// 库存预留超时释放 ticker(每 2 分钟)
+	// 释放下单但 30 分钟未支付导致的库存占用(回补 MySQL + Redis)
+	reservationTicker := time.NewTicker(2 * time.Minute)
+	defer reservationTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,8 +129,86 @@ func (w *Worker) run(ctx context.Context) {
 			if err := w.recoverExpiredPending(ctx); err != nil {
 				log.Printf("recoverExpiredPending 失败: %v", err)
 			}
+		case <-reservationTicker.C:
+			if err := w.releaseExpiredReservations(ctx); err != nil {
+				log.Printf("releaseExpiredReservations 失败: %v", err)
+			}
 		}
 	}
+}
+
+// releaseExpiredReservations 释放超时未支付的库存预留
+//
+// 场景: 用户下单后 30 分钟未支付(订单 status=1 待付款), 已扣的库存被占用
+// 处理: 对 status=1 且 expires_at 过期且订单未支付的预留记录:
+//   1) 回补 MySQL dish.stock (+quantity, version+1)
+//   2) 回补 Redis dish:{id}:stock
+//   3) 预留记录置 status=2(已释放)
+// 用事务保证一致性
+func (w *Worker) releaseExpiredReservations(ctx context.Context) error {
+	// 查超时且关联订单未支付的预留(join orders 拿支付状态)
+	type Row struct {
+		ID        int64
+		OrderID   int64
+		DishID    int
+		Quantity  int
+		OrderNo   string
+	}
+	var rows []Row
+	if err := w.db.WithContext(ctx).Raw(`
+        SELECT ir.id, ir.order_id, ir.dish_id, ir.quantity, o.number AS order_no
+          FROM inventory_reservation ir
+          JOIN orders o ON ir.order_id = o.id
+         WHERE ir.status = 1
+           AND ir.expires_at < NOW(3)
+           AND o.pay_status = 0   -- 未支付才释放(已支付不能动)
+        LIMIT 100
+    `).Scan(&rows).Error; err != nil {
+		return fmt.Errorf("查超时预留失败: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+
+	released := 0
+	for _, r := range rows {
+		err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			// 1. 回补 MySQL 库存(乐观锁 version+1)
+			res := tx.Exec(`
+                UPDATE dish
+                   SET stock = stock + ?, version = version + 1
+                 WHERE id = ?
+            `, r.Quantity, r.DishID)
+			if res.Error != nil {
+				return res.Error
+			}
+			// 2. 预留记录置为已释放(幂等: 只更新 status=1 的)
+			res = tx.Exec(`
+                UPDATE inventory_reservation
+                   SET status = 2, updated_at = NOW(3)
+                 WHERE id = ? AND status = 1
+            `, r.ID)
+			if res.Error != nil {
+				return res.Error
+			}
+			return nil
+		})
+		if err != nil {
+			log.Printf("[WARN] 释放预留失败 id=%d dish=%d err=%v", r.ID, r.DishID, err)
+			continue
+		}
+		// 3. 回补 Redis 库存
+		stockKey := fmt.Sprintf("dish:%d:stock", r.DishID)
+		if _, err := w.rdb.IncrBy(ctx, stockKey, int64(r.Quantity)).Result(); err != nil {
+			log.Printf("[WARN] 回补 Redis 库存失败 dish=%d err=%v", r.DishID, err)
+		}
+		log.Printf("⏰ 释放超时预留: order=%s dish=%d qty=%d", r.OrderNo, r.DishID, r.Quantity)
+		released++
+	}
+	if released > 0 {
+		log.Printf("本次释放 %d 条超时未支付库存预留", released)
+	}
+	return nil
 }
 
 // recoverExpiredPending 释放超时未确认的预占库存

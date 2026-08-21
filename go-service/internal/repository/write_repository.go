@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -94,18 +95,47 @@ func (r *WriteRepository) UpdateUser(ctx context.Context, id int, updates map[st
 // 地址簿写入
 // ==========================================
 func (r *WriteRepository) CreateAddressBook(ctx context.Context, addr *model.AddressBook) error {
-	return r.db.WithContext(ctx).Create(addr).Error
+	if err := r.db.WithContext(ctx).Create(addr).Error; err != nil {
+		return err
+	}
+	// 地址创建历史(只追加, 用于审计/防历史订单丢地址)
+	r.logAddressSnapshot(ctx, addr)
+	return nil
 }
 
 func (r *WriteRepository) UpdateAddressBook(ctx context.Context, userID, id int, updates map[string]interface{}) error {
 	pkgstrutil.NormalizeUpdateMap(updates)
-	return r.db.WithContext(ctx).Model(&model.AddressBook{}).
-		Where("id = ? AND user_id = ?", id, userID).Updates(updates).Error
+	if err := r.db.WithContext(ctx).Model(&model.AddressBook{}).
+		Where("id = ? AND user_id = ?", id, userID).Updates(updates).Error; err != nil {
+		return err
+	}
+	// 记录修改后的完整地址快照
+	var addr model.AddressBook
+	if err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).First(&addr).Error; err == nil {
+		r.logAddressSnapshot(ctx, &addr)
+	}
+	return nil
 }
 
 func (r *WriteRepository) DeleteAddressBook(ctx context.Context, userID, id int) error {
+	// 删除前记录地址快照(软删后历史订单仍能查到当时的地址)
+	var addr model.AddressBook
+	if err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).First(&addr).Error; err == nil {
+		r.logAddressSnapshot(ctx, &addr)
+	}
 	return r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).
 		Delete(&model.AddressBook{}).Error
+}
+
+// logAddressSnapshot 记录地址快照到 address_log(只追加, 失败不影响主流程)
+func (r *WriteRepository) logAddressSnapshot(ctx context.Context, addr *model.AddressBook) {
+	snapshot, _ := json.Marshal(addr)
+	_ = r.db.WithContext(ctx).Create(&model.AddressLog{
+		AddressID: addr.ID,
+		UserID:    addr.UserID,
+		Snapshot:  string(snapshot),
+		CreatedAt: time.Now(),
+	}).Error
 }
 
 // SetDefaultAddress 设置默认地址（事务）
@@ -250,9 +280,26 @@ func (r *WriteRepository) GetUserCoupon(ctx context.Context, userID, couponID in
 }
 
 // MarkUserCouponUsed 核销优惠券
+// 核销时同步写 user_coupon_log(USED 动作, 只追加)
 func (r *WriteRepository) MarkUserCouponUsed(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Model(&model.UserCoupon{}).Where("id = ?", id).
-		Updates(map[string]interface{}{"status": 1, "used_time": time.Now()}).Error
+	// 先查原记录(拿 user_id / coupon_id 写日志)
+	var uc model.UserCoupon
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&uc).Error; err != nil {
+		return err
+	}
+	if err := r.db.WithContext(ctx).Model(&model.UserCoupon{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"status": 1, "used_time": time.Now()}).Error; err != nil {
+		return err
+	}
+	// 写券使用流水(失败不影响核销主流程)
+	_ = r.db.WithContext(ctx).Create(&model.UserCouponLog{
+		UserID:       uc.UserID,
+		CouponID:     uc.CouponID,
+		UserCouponID: uc.ID,
+		Action:       "USED",
+		CreatedAt:    time.Now(),
+	}).Error
+	return nil
 }
 
 // GetOrderByID 根据ID获取订单

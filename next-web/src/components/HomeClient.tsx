@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DishCard } from '@/components/DishCard';
-import type { Category, Dish } from '@/types';
+import type { Category, Dish, DishReview } from '@/types';
 import { useAuthStore, useCartStore } from '@/lib/stores';
 import { useToast } from '@/lib/use-toast';
-import api from '@/lib/api';
+import api, { reviewsAPI } from '@/lib/api';
 
 interface HomeClientProps {
   initialDishes: Dish[];
@@ -74,6 +74,37 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [budget, setBudget] = useState('');
   const [priceHistory, setPriceHistory] = useState<{ timestamp: number; price: number }[]>([]);
+
+  // 评价: 当前选中菜品的评价列表 + 提交表单
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewContent, setReviewContent] = useState('');
+  const [reviewAnonymous, setReviewAnonymous] = useState(false);
+  const reviewsQuery = useQuery({
+    queryKey: ['dish-reviews', selectedDish?.id],
+    enabled: !!selectedDish,
+    queryFn: async () => {
+      const res: any = await reviewsAPI.listByDish(selectedDish!.id);
+      return (res?.data?.data || res?.data || []) as DishReview[];
+    },
+  });
+  const submitReview = useMutation({
+    mutationFn: () =>
+      reviewsAPI.create({
+        dishId: selectedDish!.id,
+        rating: reviewRating,
+        content: reviewContent.trim(),
+        isAnonymous: reviewAnonymous ? 1 : 0,
+        orderId: 0, // 后端校验订单归属; 无真实订单时后端会提示"仅购买过的用户可评"
+      }),
+    onSuccess: () => {
+      toast.show('评价成功，感谢反馈');
+      setReviewContent('');
+      reviewsQuery.refetch();
+    },
+    onError: (e: any) => {
+      toast.show(e?.response?.data?.error || '评价失败');
+    },
+  });
 
   // 国际化
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
@@ -389,6 +420,71 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
                 <PriceChart data={priceHistory} />
               </div>
             )}
+
+            {/* 评价区 */}
+            <div className="mt-5 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+              <div className="text-sm font-medium mb-2">
+                💬 用户评价
+                <span className="ml-2 text-xs" style={{ color: 'var(--muted)' }}>
+                  {reviewsQuery.data?.length ? `${reviewsQuery.data.length} 条` : ''}
+                </span>
+              </div>
+              {reviewsQuery.isLoading ? (
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>加载中...</p>
+              ) : reviewsQuery.data?.length ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {reviewsQuery.data.map((r) => (
+                    <div key={r.id} className="rounded-lg p-2" style={{ background: 'var(--bg-soft)' }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs" style={{ color: 'var(--warn)' }}>{'⭐'.repeat(Math.max(1, Math.min(5, r.rating)))}</span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{r.isAnonymous ? '匿名' : (r.userName || '用户')}</span>
+                      </div>
+                      {r.content ? <p className="text-xs mt-1">{r.content}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>暂无评价</p>
+              )}
+
+              {/* 提交评价 */}
+              <div className="mt-3">
+                <div className="flex gap-0.5 mb-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setReviewRating(n)}
+                      className={`text-lg ${n <= reviewRating ? '' : 'opacity-30'}`}
+                      style={{ color: 'var(--warn)' }}
+                    >
+                      ⭐
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={reviewContent}
+                  onChange={(e) => setReviewContent(e.target.value)}
+                  placeholder="说两句吧(选填)"
+                  rows={2}
+                  className="w-full rounded-lg p-2 text-xs mb-2"
+                  style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)' }}
+                />
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+                    <input type="checkbox" checked={reviewAnonymous} onChange={(e) => setReviewAnonymous(e.target.checked)} />
+                    匿名
+                  </label>
+                  <button
+                    onClick={() => submitReview.mutate()}
+                    disabled={submitReview.isPending}
+                    className="pill pill-accent !h-8 !px-4 !text-xs"
+                  >
+                    {submitReview.isPending ? '提交中...' : '提交评价'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-6">
               <Link href="/assistant" className="pill pill-accent w-full">让 AI 帮我下单</Link>
             </div>

@@ -137,3 +137,12 @@ export const marketingAPI = {
       sessionId: 'merchant-copy',
     }),
 };
+
+// ==================== 菜品评价 API (走 nginx /go 代理到 go-service) ====================
+export const reviewsAPI = {
+  // 查某菜品的评价列表: GET /go/dishes/:id/reviews → go-service /api/v1/dishes/:id/reviews
+  listByDish: (dishId: number) => api.get(`/go/dishes/${dishId}/reviews`),
+  // 提交评价: POST /go/reviews → go-service /api/v1/reviews
+  create: (data: { orderId: number; dishId: number; rating: number; content?: string; images?: string; isAnonymous?: number }) =>
+    api.post('/go/reviews', data),
+};

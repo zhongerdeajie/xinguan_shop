@@ -95,6 +95,22 @@ export interface Category {
   status: number;
 }
 
+// ==================== 评价类型 ====================
+export interface DishReview {
+  id: number;
+  orderId: number;
+  userId?: number;
+  dishId: number;
+  rating: number; // 1-5 星
+  content?: string;
+  images?: string | null;
+  isAnonymous: number;
+  createdAt: string;
+  // 匿名评价时用户信息为空
+  userName?: string | null;
+  avatar?: string | null;
+}
+
 // ==================== Setmeal Types ====================
 export interface Setmeal {
   id: number;

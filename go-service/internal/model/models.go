@@ -336,3 +336,27 @@ type InventoryReservation struct {
 }
 
 func (InventoryReservation) TableName() string { return "inventory_reservation" }
+
+// UserCouponLog 优惠券领/用/过期 流水(只追加)
+type UserCouponLog struct {
+	ID           int64     `json:"id" gorm:"primaryKey;column:id"`
+	UserID       int       `json:"userId" gorm:"column:user_id"`
+	CouponID     int       `json:"couponId" gorm:"column:coupon_id"`
+	UserCouponID int       `json:"userCouponId" gorm:"column:user_coupon_id"`
+	Action       string    `json:"action" gorm:"column:action"` // CLAIMED/USED/EXPIRED/REFUNDED
+	OrderID      *int64    `json:"orderId" gorm:"column:order_id"`
+	CreatedAt    time.Time `json:"createdAt" gorm:"column:created_at"`
+}
+
+func (UserCouponLog) TableName() string { return "user_coupon_log" }
+
+// AddressLog 地址修改历史(只追加, 防止改了地址丢历史订单)
+type AddressLog struct {
+	ID        int64     `json:"id" gorm:"primaryKey;column:id"`
+	AddressID int       `json:"addressId" gorm:"column:address_id"`
+	UserID    int       `json:"userId" gorm:"column:user_id"`
+	Snapshot  string    `json:"snapshot" gorm:"column:snapshot;type:json"` // 完整地址快照 JSON
+	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at"`
+}
+
+func (AddressLog) TableName() string { return "address_log" }

@@ -9,6 +9,7 @@ interface DishCardProps {
   onAdd?: (dish: Dish) => void | Promise<void>;
   addLabel?: string;
   showAddButton?: boolean;
+  onReview?: (dish: Dish) => void;
 }
 
 /**
@@ -25,11 +26,16 @@ export function DishCard({
   onAdd,
   addLabel = '加入购物车',
   showAddButton = true,
+  onReview,
 }: DishCardProps) {
   const handleClick = () => onClick?.(dish);
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation(); // 阻止冒泡到 onClick
     onAdd?.(dish);
+  };
+  const handleReview = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onReview?.(dish);
   };
 
   return (
@@ -66,8 +72,20 @@ export function DishCard({
           <span className="mono text-lg font-semibold" style={{ color: 'var(--accent)' }}>
             ¥{Number(dish.price).toFixed(2)}
           </span>
-          <span className="text-sm" style={{ color: 'var(--warn)' }}>
-            ⭐ {dish.rating ?? '4.5'}
+          <span className="flex items-center gap-2">
+            {onReview ? (
+              <button
+                onClick={handleReview}
+                className="text-xs px-2 py-1 rounded-full"
+                style={{ background: 'var(--bg-soft)', color: 'var(--muted)' }}
+                title="查看/提交评价"
+              >
+                💬 评价
+              </button>
+            ) : null}
+            <span className="text-sm" style={{ color: 'var(--warn)' }}>
+              ⭐ {dish.rating ?? '4.5'}
+            </span>
           </span>
         </div>
         {showAddButton && (

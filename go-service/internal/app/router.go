@@ -10,6 +10,7 @@ import (
 
 	"go-service/internal/app/address"
 	"go-service/internal/app/appdeps"
+	"go-service/internal/app/audit"
 	"go-service/internal/app/cart"
 	"go-service/internal/app/dish"
 	"go-service/internal/app/employee"
@@ -67,6 +68,14 @@ func Register(r *gin.Engine, d appdeps.Deps) {
 			users.POST("", userH.Create)
 			users.GET("/:id", userH.GetByID)
 			users.PUT("/:id", userH.Update)
+		}
+
+		// 管理端审计查询(退款流水 / 库存审计, 只读对账用)
+		auditH := audit.NewHandler(d.DB)
+		auditG := admin.Group("/audit")
+		{
+			auditG.GET("/refunds", auditH.ListRefunds)
+			auditG.GET("/stock", auditH.ListStockAudits)
 		}
 	}
 
