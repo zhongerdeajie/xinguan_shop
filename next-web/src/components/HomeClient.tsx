@@ -114,6 +114,19 @@ export default function HomeClient({ initialDishes, initialCategories }: HomeCli
   }, []);
   const i18n = T[lang];
 
+  // 从订单详情"去评价"跳转进来: ?reviewDish=<id> 自动打开对应菜品评价
+  useEffect(() => {
+    if (typeof window === 'undefined' || dishes.length === 0) return;
+    const id = Number(new URLSearchParams(window.location.search).get('reviewDish'));
+    if (!id) return;
+    const dish = dishes.find((d) => d.id === id);
+    if (dish) {
+      setSelectedDish(dish);
+      // 清掉 URL 参数,避免刷新重复弹窗
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [dishes]);
+
   // 优惠券中心(已登录才需要)
   const couponCenter = useQuery({
     queryKey: ['coupons', 'center', customerToken],

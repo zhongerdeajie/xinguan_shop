@@ -211,6 +211,13 @@ export default function AccountPage() {
 }
 
 function OrderRow({ order, onRefund, pending }: { order: Order; onRefund: (id: number) => void; pending: boolean }) {
+  // 已完成订单可评价: 点"去评价"跳回首页并打开对应菜品评价
+  const goReview = (dishId?: number, dishName?: string) => {
+    if (!dishId) return;
+    // 跳首页并带参数, HomeClient 读到后自动打开该菜品评价
+    window.location.href = `/?reviewDish=${dishId}&reviewName=${encodeURIComponent(dishName || '')}`;
+  };
+
   return (
     <div className="xcard p-4">
       <div className="flex justify-between text-sm mb-2">
@@ -221,8 +228,20 @@ function OrderRow({ order, onRefund, pending }: { order: Order; onRefund: (id: n
       </div>
       <div className="text-sm space-y-1" style={{ color: 'var(--fg-soft)' }}>
         {(order.orderDetails || []).map((d, i) => (
-          <div key={i}>
-            {d.name} × {d.number}
+          <div key={i} className="flex items-center justify-between gap-2">
+            <span>
+              {d.name} × {d.number}
+            </span>
+            {/* 已完成订单的菜品: 引导评价 */}
+            {order.status === 5 && (
+              <button
+                onClick={() => goReview(d.dishId, d.name)}
+                className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+                style={{ background: 'var(--bg-soft)', color: 'var(--muted)' }}
+              >
+                💬 去评价
+              </button>
+            )}
           </div>
         ))}
       </div>

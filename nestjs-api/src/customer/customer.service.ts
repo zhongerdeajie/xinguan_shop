@@ -82,9 +82,25 @@ export class CustomerService {
     if (exists) {
       throw new ConflictException('你已经领过这张券了');
     }
-    return this.prisma.userCoupon.create({
+    const uc = await this.prisma.userCoupon.create({
       data: { userId, couponId, status: 0, claimedTime: new Date() },
       include: { coupon: true },
     });
+    // 写领券流水(CLAIMED 动作, 只追加) —— 与 Go 核销写 USED 形成完整 user_coupon_log 流水
+    try {
+      await this.prisma.userCouponLog.create({
+        data: {
+          userId,
+          couponId,
+          userCouponId: uc.id,
+          action: 'CLAIMED',
+          createdAt: new Date(),
+        },
+      });
+    } catch (err) {
+      // 流水失败不影响领券主流程(只做审计/对账用途), 但打印便于排查
+      console.error(`[WARN] 写 user_coupon_log(CLAIMED) 失败 userId=${userId} couponId=${couponId}:`, (err as Error).message);
+    }
+    return uc;
   }
 }

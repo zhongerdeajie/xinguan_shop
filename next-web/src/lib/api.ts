@@ -146,3 +146,10 @@ export const reviewsAPI = {
   create: (data: { orderId: number; dishId: number; rating: number; content?: string; images?: string; isAnonymous?: number }) =>
     api.post('/go/reviews', data),
 };
+
+// ==================== 库存审计 API (走 nginx /go 代理到 go-service, 管理端) ====================
+export const stockAuditAPI = {
+  // 查库存校准审计: GET /go/audit/stock → go-service /api/v1/audit/stock
+  list: (params?: { dishId?: number; page?: number; pageSize?: number }) =>
+    api.get('/go/audit/stock', { params }),
+};

@@ -111,6 +111,18 @@ export interface DishReview {
   avatar?: string | null;
 }
 
+// ==================== 库存审计类型 ====================
+export interface StockAudit {
+  id: number;
+  dishId: number;
+  mysqlStock: number;
+  redisStock: number;
+  drift: number;
+  action: string;
+  note?: string;
+  createdAt: string;
+}
+
 // ==================== Setmeal Types ====================
 export interface Setmeal {
   id: number;

@@ -6,7 +6,10 @@ import { usePathname, useRouter } from 'next/navigation';
 const NAV_GROUPS = [
   {
     label: '总览',
-    items: [{ href: '/dashboard', label: '仪表盘', icon: '📊' }],
+    items: [
+      { href: '/dashboard', label: '仪表盘', icon: '📊' },
+      { href: '/stock-audit', label: '库存审计', icon: '📦' },
+    ],
   },
   {
     label: '业务管理',
